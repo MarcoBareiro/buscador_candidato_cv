@@ -480,7 +480,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const error = $('Preparar Entrada Tecnologia').first().json.error || \"Ocurrió un error al preprar la entrade de tecnología\";\n\nreturn [{\n  json: {\n    success: false,\n    error: error,\n    data: null,\n    instruccion: \"Analiza el error, muestrale el mensaje de error y sugiere que se puede hacer\"\n  }\n}];"
+        "jsCode": "const error = $('Preparar Entrada Tecnologia').first().json.error || \"Ocurrió un error al preprar la entrade de tecnología\";\n\nreturn [{\n  json: {\n    success: false,\n    error: error,\n    data: null,\n    instruccion: null\n  }\n}];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -898,7 +898,7 @@
   "settings": {
     "executionOrder": "v1"
   },
-  "versionId": "f8a76f2a-9770-42de-9146-3644329e6fc9",
+  "versionId": "0164a5e0-06d0-4a91-aca0-d77bedcdd959",
   "meta": {
     "templateCredsSetupCompleted": true,
     "instanceId": "ea3a2191dd083f3463309ce1fd71d6ac10d38749f12af05ebf88e034ea7d7231"
