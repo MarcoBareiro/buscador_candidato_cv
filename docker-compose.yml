@@ -1,0 +1,39 @@
+version: "3.8"
+
+services:
+  qdrant:
+    image: qdrant/qdrant:v1.15.5
+    container_name: qdrant
+    restart: unless-stopped
+    ports:
+      - "6333:6333" # HTTP dashboard / API
+      - "6334:6334" # gRPC (opcional)
+    volumes:
+      - qdrant_storage:/qdrant/storage
+
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: n8n
+    restart: unless-stopped
+    ports:
+      - "5678:5678"
+    environment:
+      # 👇 Cambia esto por la IP LAN del servidor (ej. 192.168.1.100)
+      - N8N_HOST=localhost
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=http
+      # Permitir acceso desde nodos Function a libs externas si lo necesitas
+      - NODE_FUNCTION_ALLOW_EXTERNAL=*
+      # Seguridad básica
+      - N8N_BASIC_AUTH_ACTIVE=true
+      - N8N_BASIC_AUTH_USER=mbareiro
+      - N8N_BASIC_AUTH_PASSWORD=n8n
+      # Importante para que los webhooks funcionen desde otras máquinas
+      - WEBHOOK_TUNNEL_URL=http://localhost:5678
+    volumes:
+      - ./n8n_data:/home/node/.n8n
+    depends_on:
+      - qdrant
+
+volumes:
+  qdrant_storage:

@@ -1,0 +1,185 @@
+{
+  "name": "Tool - buscar correo de candidatos por nombre",
+  "nodes": [
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -192,
+        48
+      ],
+      "id": "225f91f0-aa10-4ae6-96f5-d01aa577a8cf",
+      "name": "When Executed by Another Workflow"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -416,
+        -144
+      ],
+      "id": "209abd8c-1ffd-455f-89db-e825156b12b5",
+      "name": "When clicking ‘Execute workflow’"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Ignorar el input real y retornar query hardcoded para pruebas\nconst queryHardcoded = \"Carolina bujaico\";\n\nreturn [{\n  json: {\n    query: queryHardcoded\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -192,
+        -144
+      ],
+      "id": "72877245-16af-46eb-8f92-18b102ecd00f",
+      "name": "Datos de prueba"
+    },
+    {
+      "parameters": {
+        "jsCode": "const nombreIngresado = $input.first().json.query || \"\";\n\n// Normalizar y dividir el nombre en palabras\nconst palabras = nombreIngresado\n  .trim()\n  .split(/\\s+/) // Divide por espacios\n  .filter(palabra => palabra.length > 0); // Elimina strings vacíos\n\nif (palabras.length === 0) {\n  return [{\n    json: {\n      success: false,\n      error: \"No se proporcionó un nombre válido\",\n      data: null,\n      instruccion: \"Si no tienes un nombre válido, pidele al usuario que te proporcione uno\"\n    }\n  }];\n}\n\n// Capitalizar primera letra de cada palabra para match con Qdrant\nconst palabrasCapitalizadas = palabras.map(palabra => \n  palabra.charAt(0).toUpperCase() + palabra.slice(1).toLowerCase()\n);\n\n// SOLUCIÓN FINAL: Búsqueda con MUST + TEXT respetando capitalización\nconst qdrantBody = {\n  filter: {\n    must: palabrasCapitalizadas.map(palabra => ({\n      key: \"persona_nombre_apellido\",\n      match: {\n        text: palabra\n      }\n    }))\n  },\n  limit: 100,\n  with_payload: true,\n  with_vector: false\n};\n\nreturn [{\n  json: {\n    qdrant_body: qdrantBody,\n    palabras_buscadas: palabrasCapitalizadas,\n    nombre_original: nombreIngresado\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        32,
+        -48
+      ],
+      "id": "623c4504-8570-4083-b313-d81a2a16792d",
+      "name": "Preparar consulta de búsqueda"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://qdrant:6333/collections/curriculums_rag/points/scroll",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"filter\": {{ JSON.stringify($json.qdrant_body.filter) }},\n  \"limit\": {{ $json.qdrant_body.limit }},\n  \"with_payload\": {{ $json.qdrant_body.with_payload }},\n  \"with_vector\": {{ $json.qdrant_body.with_vector }}\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        256,
+        -48
+      ],
+      "id": "b41d78a2-8717-4d55-b2da-a16370790701",
+      "name": "HTTP: Qdrant Search - Búsqueda con filtro",
+      "retryOnFail": true,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst candidatos = [];\n\n// Procesar resultados de Qdrant\nfor (const item of items) {\n  // La estructura puede variar según el método de consulta\n  const points = item.json.result?.points || item.json.points || [];\n  \n  for (const point of points) {\n    const payload = point.payload || {};\n    \n    // Extraer datos relevantes\n    if (payload.persona_nombre_apellido && payload.persona_correo) {\n      candidatos.push({\n        nombre: payload.persona_nombre_apellido,\n        correo: payload.persona_correo\n      });\n    }\n  }\n}\n\n// Eliminar duplicados por correo (si existen múltiples versiones del CV)\nconst candidatosUnicos = candidatos.reduce((acc, current) => {\n  const existe = acc.find(item => item.correo === current.correo);\n  if (!existe) {\n    acc.push(current);\n  }\n  return acc;\n}, []);\n\nreturn [{\n  json: {\n    success: true,\n    error: null,\n    data: {\n      total_encontrados: candidatosUnicos.length,\n      candidatos: candidatosUnicos\n    },\n    instruccion: null    \n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        -144
+      ],
+      "id": "77f2bf8b-3708-4ff3-94f9-bc685ea42647",
+      "name": "Formatear respuesta"
+    },
+    {
+      "parameters": {
+        "jsCode": "const error = $input.first().json.error || {};\n\nreturn [{\n  json: {\n    success: false,\n    error: error.message || \"No se pudo conectar con Qdrant\",\n    data: null,\n    instruccion: \"muestrale el mensaje de error y sugiere que se puede hacer\"\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        48
+      ],
+      "id": "83d9a39f-8c72-4a06-abb2-7458cfc6d057",
+      "name": "Error: Qdrant Search - Búsqueda con filtro"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "Datos de prueba",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Datos de prueba": {
+      "main": [
+        [
+          {
+            "node": "Preparar consulta de búsqueda",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar consulta de búsqueda": {
+      "main": [
+        [
+          {
+            "node": "HTTP: Qdrant Search - Búsqueda con filtro",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP: Qdrant Search - Búsqueda con filtro": {
+      "main": [
+        [
+          {
+            "node": "Formatear respuesta",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error: Qdrant Search - Búsqueda con filtro",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "Preparar consulta de búsqueda",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "9affdf73-14cf-4fa5-bb4c-764074bb3fd0",
+  "meta": {
+    "instanceId": "ea3a2191dd083f3463309ce1fd71d6ac10d38749f12af05ebf88e034ea7d7231"
+  },
+  "id": "ffyXAStTuI4TITEL",
+  "tags": []
+}

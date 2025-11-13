@@ -1,0 +1,1053 @@
+{
+  "name": "RAG - Recibir Curriculums",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "3d96496b-db80-494a-af6e-48c78bc64ac5",
+        "responseMode": "responseNode",
+        "options": {
+          "binaryPropertyName": "documento"
+        }
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -592,
+        384
+      ],
+      "id": "0f184d17-e09e-4cc4-8f8b-8f3512a16798",
+      "name": "entrada",
+      "webhookId": "3d96496b-db80-494a-af6e-48c78bc64ac5",
+      "alwaysOutputData": false,
+      "executeOnce": false
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "a13aa6f6-1b51-4121-b829-6e9ba0f2b353",
+              "leftValue": "={{ $json.validation_passed }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "false",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        80,
+        384
+      ],
+      "id": "ba014e19-9c83-436b-a623-c161cb1df774",
+      "name": "If",
+      "alwaysOutputData": false,
+      "executeOnce": false,
+      "retryOnFail": false
+    },
+    {
+      "parameters": {
+        "options": {
+          "responseCode": 400
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        304,
+        288
+      ],
+      "id": "d4656fc6-422c-40d6-81eb-e080ee167ae1",
+      "name": "Respond to Webhook",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.cloud.llamaindex.ai/api/v1/parsing/upload",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer llx-dWfWMkofGJfcba905zOROy9hDc793yP33lWCN9MlreFlETVb"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "parse_mode",
+              "value": "parse_page_with_llm"
+            },
+            {
+              "name": "high_res_ocr",
+              "value": "true"
+            },
+            {
+              "name": "adaptive_long_table",
+              "value": "true"
+            },
+            {
+              "name": "outlined_table_extraction",
+              "value": "true"
+            },
+            {
+              "name": "output_tables_as_HTML",
+              "value": "false"
+            },
+            {
+              "parameterType": "formBinaryData",
+              "name": "file",
+              "inputDataFieldName": "=documento0"
+            }
+          ]
+        },
+        "options": {
+          "redirect": {}
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        752,
+        384
+      ],
+      "id": "402cda07-78a7-4632-981b-3b2a68451362",
+      "name": "llamaparse-upload-doc",
+      "executeOnce": false,
+      "retryOnFail": true,
+      "waitBetweenTries": 5000,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "amount": 10
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        976,
+        288
+      ],
+      "id": "e3d80def-9df2-409b-910b-969ed0cd8cdb",
+      "name": "Wait",
+      "webhookId": "c8b85ac6-d5fd-4a7e-8daa-56cdef495114"
+    },
+    {
+      "parameters": {
+        "url": "=https://api.cloud.llamaindex.ai/api/v1/parsing/job/{{$json.id}}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer llx-dWfWMkofGJfcba905zOROy9hDc793yP33lWCN9MlreFlETVb"
+            }
+          ]
+        },
+        "options": {
+          "redirect": {
+            "redirect": {}
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1200,
+        224
+      ],
+      "id": "f74acc74-3804-48fe-9d75-086d3828fda6",
+      "name": "llamaparse-check-status"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "ceb4e310-c490-41e6-be61-5477d97e5fff",
+              "leftValue": "={{ $json.status }}",
+              "rightValue": "SUCCESS",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1424,
+        288
+      ],
+      "id": "c4a2a225-b87f-487e-bd42-f9824ed23e36",
+      "name": "If1",
+      "retryOnFail": true,
+      "maxTries": 5
+    },
+    {
+      "parameters": {
+        "url": "=https://api.cloud.llamaindex.ai/api/v1/parsing/job/{{$json.id}}/result/markdown",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer llx-dWfWMkofGJfcba905zOROy9hDc793yP33lWCN9MlreFlETVb"
+            }
+          ]
+        },
+        "options": {
+          "redirect": {
+            "redirect": {}
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1648,
+        288
+      ],
+      "id": "d7675476-77ae-4031-98e8-3d3f0e2ca95b",
+      "name": "llamaparse-markdown",
+      "retryOnFail": true,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "result.response.chunks",
+        "include": "allOtherFields",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        2320,
+        192
+      ],
+      "id": "a19916d1-cbc8-4153-97dd-6855d04ec678",
+      "name": "chunks-en-items"
+    },
+    {
+      "parameters": {
+        "values": {
+          "boolean": [],
+          "number": [],
+          "string": [
+            {
+              "name": "grupo_nombre",
+              "value": "={{$json.body.grupo_nombre}}"
+            },
+            {
+              "name": "documento_nombre",
+              "value": "={{$json.body.documento_nombre}}"
+            },
+            {
+              "name": "documento",
+              "value": "={{$binary[\"documento\"]}}"
+            },
+            {
+              "name": "persona_nombre_apellido",
+              "value": "={{$json.body.persona_nombre_apellido}}"
+            },
+            {
+              "name": "persona_correo",
+              "value": "={{$json.body.persona_correo}}"
+            },
+            {
+              "name": "persona_telefono",
+              "value": "={{$json.body.persona_telefono}}"
+            },
+            {
+              "name": "trabajo_cargo_postulante",
+              "value": "={{$json.body.trabajo_cargo_postulante}}"
+            },
+            {
+              "name": "trabajo_modalidad",
+              "value": "={{$json.body.trabajo_modalidad}}"
+            },
+            {
+              "name": "trabajo_espectativa_salarial",
+              "value": "={{$json.body.trabajo_espectativa_salarial}}"
+            }
+          ]
+        },
+        "options": {
+          "dotNotation": false
+        }
+      },
+      "name": "estructurar-entrada",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [
+        -368,
+        384
+      ],
+      "id": "4a9b3686-af5b-4f0b-9eae-ddb4e7f98917"
+    },
+    {
+      "parameters": {
+        "jsCode": "for (const item of $input.all()) {\n  const data = item.json;\n  const errors = [];\n\n  // Validaciones...\n  if (!data.documento_nombre || typeof data.documento_nombre !== 'string' || data.documento_nombre.trim() === '') {\n    errors.push('Campo \"documento_nombre\" es requerido');\n  }\n\n  if (!data.grupo_nombre || typeof data.grupo_nombre !== 'string' || data.grupo_nombre.trim() === '') {\n    errors.push('Campo \"grupo_nombre\" es requerido');\n  } \n\n  const hasBinaryData = item.binary && Object.keys(item.binary).length > 0;\n  \n  if (!hasBinaryData) {\n    errors.push('Campo \"documento\" (archivo) es requerido');\n  }\n\n  if (!data.persona_nombre_apellido || typeof data.persona_nombre_apellido !== 'string' || data.persona_nombre_apellido.trim() === '') {\n    errors.push('Campo \"persona_nombre_apellido\" es requerido');\n  } \n\n  if (!data.persona_correo || typeof data.persona_correo !== 'string' || data.persona_correo.trim() === '') {\n    errors.push('Campo \"persona_correo\" es requerido');\n  } \n\n  if (!data.persona_telefono || typeof data.persona_telefono !== 'string' || data.persona_telefono.trim() === '') {\n    errors.push('Campo \"persona_telefono\" es requerido');\n  } \n\n  if (!data.trabajo_cargo_postulante || typeof data.trabajo_cargo_postulante !== 'string' || data.trabajo_cargo_postulante.trim() === '') {\n    errors.push('Campo \"trabajo_cargo_postulante\" es requerido');\n  } \n\n  if (!data.trabajo_modalidad || typeof data.trabajo_modalidad !== 'string' || data.trabajo_modalidad.trim() === '') {\n    errors.push('Campo \"trabajo_modalidad\" es requerido');\n  } \n\n  if (!data.trabajo_espectativa_salarial || typeof data.trabajo_espectativa_salarial !== 'string' || data.trabajo_espectativa_salarial.trim() === '') {\n    errors.push('Campo \"trabajo_espectativa_salarial\" es requerido');\n  } \n\n  // Construir el resultado\n  if (errors.length > 0) {\n    // SI HAY ERRORES: Preparar respuesta de error directamente\n    item.json = {\n      status: 'error',\n      type: 'validation_error',\n      message: 'Datos de entrada inválidos',\n      errors: errors,\n      validation_passed: false\n    };\n  } else {\n    // SI NO HAY ERRORES: Mantener los datos para continuar procesamiento\n    item.json = {\n      documento_nombre: data.documento_nombre,\n      grupo_nombre: data.grupo_nombre,\n      persona_nombre_apellido: data.persona_nombre_apellido,\n      persona_correo: data.persona_correo,\n      persona_telefono: data.persona_telefono,\n      trabajo_cargo_postulante: data.trabajo_cargo_postulante,\n      trabajo_modalidad: data.trabajo_modalidad,\n      trabajo_espectativa_salarial: data.trabajo_espectativa_salarial,\n      validation_passed: true,\n      validated_at: new Date().toISOString()\n    };\n  }\n}\n\nreturn $input.all();"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -144,
+        384
+      ],
+      "id": "47d98aad-8924-4fa6-8eb9-01374bb9d101",
+      "name": "validación-campos"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.cloudflare.com/client/v4/accounts/16e36cece5147fb752daca5681dc24d0/ai/run/@cf/baai/bge-large-en-v1.5",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer vAM979SvPk2BHmmVHK1Kn6RPqNvgdFJqXjlkgKD4"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"text\": {{ JSON.stringify($json['result.response.chunks'].content) }}\n}",
+        "options": {
+          "redirect": {
+            "redirect": {}
+          },
+          "response": {
+            "response": {}
+          },
+          "timeout": 30000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2768,
+        192
+      ],
+      "id": "0f36b2da-540b-4c26-83ed-b7ee088d5399",
+      "name": "cloudflare-embedding-generar",
+      "retryOnFail": true,
+      "waitBetweenTries": 3000,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        2544,
+        192
+      ],
+      "id": "4a056005-fcfb-472a-9a58-e17647664cc1",
+      "name": "Loop"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const item = $input.item.json; // item actual (shorthand: $json)\nconst cfResponse = item; // si el item es la respuesta de Cloudflare\nif (!cfResponse || !cfResponse.success) {\n  const errorMsg = cfResponse?.errors?.[0]?.message || 'Unknown error';\n  throw new Error(`Cloudflare embedding failed: ${errorMsg}`);\n}\n\nconst vector = cfResponse.result.data[0];\nif (!Array.isArray(vector) || vector.length !== 1024) {\n  throw new Error(`Vector inválido. Esperado: 1024 dimensiones, Recibido: ${vector?.length || 0}`);\n}\n\nconst text = $('Loop').item.json['result.response.chunks'].content;\nconst seccion = $('Loop').item.json['result.response.chunks'].section\n\n// Devolver el item combinado\nreturn {\n  json: {\n    vector,\n    vector_model: 'bge-large-en-v1.5',\n    vector_dimensions: 1024,\n    text: text,\n    seccion: seccion,\n    embedding_generated_at: new Date().toISOString()\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2992,
+        368
+      ],
+      "id": "6176ef8e-869a-48b7-ab30-85a1d2a052b8",
+      "name": "embedding-vector-metadata"
+    },
+    {
+      "parameters": {
+        "aggregate": "aggregateAllItemData",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.aggregate",
+      "typeVersion": 1,
+      "position": [
+        2768,
+        -48
+      ],
+      "id": "d8611e2e-9369-4e75-a71e-72a194db57d7",
+      "name": "Aggregate"
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "http://qdrant:6333/collections/curriculums_rag/points",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"points\": {{ JSON.stringify($json.points) }}\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3216,
+        -48
+      ],
+      "id": "825fb6b4-a957-455d-b454-589e4351071f",
+      "name": "qdrant-insertar",
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst allChunks = items.flatMap(item => item.json.data || []);\n\nconst baseTimestamp = Date.now();\nconst datosIniciales = $('preparar-datos').first().json\n\nconst originalKeywords = $('Cloudflare: LLM Llama 3.3').first().json.result.response.keywords;\nconst lowercaseKeywords = originalKeywords.map(keyword => keyword.toLowerCase());\n\nconst points = allChunks.map((chunk, index) => ({\n  id: baseTimestamp + index, // Genera ID numérico único\n  vector: chunk.vector,\n  payload: {\n    documento_nombre: datosIniciales.documento_nombre,\n    grupo_nombre: datosIniciales.grupo_nombre,\n    text: chunk.text,\n    seccion: chunk.seccion,\n    persona_nombre_apellido: datosIniciales.persona_nombre_apellido,\n    persona_correo: datosIniciales.persona_correo,\n    persona_telefono: datosIniciales.persona_telefono,\n    trabajo_cargo_postulante: datosIniciales.trabajo_cargo_postulante,\n    trabajo_modalidad: datosIniciales.trabajo_modalidad,\n    trabajo_espectativa_salarial: datosIniciales.trabajo_espectativa_salarial,\n    habilidades_tecnologia: lowercaseKeywords,\n    created_at: datosIniciales.validated_at\n  }\n}));\n\nreturn [{ json: { points: points } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2992,
+        -48
+      ],
+      "id": "df5bb2fa-85bf-4535-bf7e-7ee81404786a",
+      "name": "qdrant-estructura-request"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n    \"success\": true,\n    \"error\": null,\n    \"error_detalle\": null,\n    \"data\": {\n        \"mensaje\": \"Documento indexado correctamente\"\n    }\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        3440,
+        -144
+      ],
+      "id": "22c35061-2ad9-4e2e-b80a-c7896ab29f34",
+      "name": "Respond-success"
+    },
+    {
+      "parameters": {
+        "jsCode": "const error = $input.first().json.error || {};\nconst inputData = $('preparar-datos').first()?.json || {};\n\nreturn [{\n  json: {\n    success: false,\n    error: \"Error al procesar documento con LlamaParse\",\n    error_detalle: error.message || \"No se pudo subir el documento al servicio de parsing\",\n    data: {\n      documento_nombre: inputData.documento_nombre,\n      fase: \"llamaparse_upload\",\n      timestamp: new Date().toISOString()\n    }\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        976,
+        528
+      ],
+      "id": "d4d042a1-e828-41cb-bd2f-da886cd8eb34",
+      "name": "llamaparse-error-formateo"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseCode": 500
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        1200,
+        528
+      ],
+      "id": "0a584e92-c4ab-4764-861c-78022b709d71",
+      "name": "llamaparse-error-upload"
+    },
+    {
+      "parameters": {
+        "jsCode": "const error = $input.first().json.error || {};\n\nreturn [{\n  json: {\n    success: false,\n    error: \"Error al generar embeddings\",\n    error_detalle: error.message || \"Cloudflare no pudo generar el vector embedding\",\n    data: {\n      fase: \"cloudflare_embedding\",\n      timestamp: new Date().toISOString()\n    }\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2992,
+        144
+      ],
+      "id": "06da2f5a-c1b3-4339-b369-312750e42880",
+      "name": "cloudflare-error-formateo"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseCode": 500
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        3216,
+        144
+      ],
+      "id": "65a7e2d8-4958-40af-87e4-8e9e88e1448f",
+      "name": "cloudflare-error-embedding"
+    },
+    {
+      "parameters": {
+        "jsCode": "const error = $input.first().json.error || {};\nconst inputData = $('validación-campos').first()?.json || {};\n\nreturn [{\n  json: {\n    success: false,\n    error: \"Error al eliminar chunks antiguos\",\n    error_detalle: error.message || \"No se pudieron eliminar los chunks previos del documento\",\n    data: {\n      documento_nombre: inputData.documento_nombre,\n      persona_nombre_apellido: inputData.persona_nombre_apellido,\n      persona_correo: inputData.persona_correo,\n      fase: \"qdrant_eliminacion\",\n      timestamp: new Date().toISOString()\n    }\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        528,
+        576
+      ],
+      "id": "2f97ef34-f919-4775-b5d4-d71374facd62",
+      "name": "qdrant-error-eliminar-formateo"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseCode": 500
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        752,
+        576
+      ],
+      "id": "9e44c60b-9700-4cc3-8ed2-f14209877773",
+      "name": "qdrant-error-eliminar"
+    },
+    {
+      "parameters": {
+        "jsCode": "const error = $input.first().json.error || {};\nconst requestData = $('qdrant-estructura-request').first()?.json || {};\nconst firstChunk = requestData.points?.[0]?.payload || {};\n\nreturn [{\n  json: {\n    success: false,\n    error: \"Error al insertar embeddings en Qdrant\",\n    error_detalle: error.message || \"No se pudieron guardar los chunks en la base de datos\",\n    data: {\n      documento_nombre: firstChunk.documento_nombre,\n      chunks_afectados: requestData.points?.length || 0,\n      fase: \"qdrant_insercion\",\n      timestamp: new Date().toISOString()\n    }\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3440,
+        48
+      ],
+      "id": "63949ca0-702d-43fd-a6fd-1c62575354f1",
+      "name": "qdrant-error-insertar-formateo"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseCode": 500
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        3664,
+        48
+      ],
+      "id": "7e248340-f3bb-46b8-aefa-2d3ce37e2a05",
+      "name": "qdrant-error-insertar"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://qdrant:6333/collections/curriculums_rag/points/delete",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"filter\": {\n    \"must\": [\n      {\n        \"key\": \"persona_correo\",\n        \"match\": {\n          \"value\": \"{{ $json.persona_correo }}\"\n        }\n      }\n    ]\n  }\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        304,
+        480
+      ],
+      "id": "36d1fded-606a-49be-94a0-34aec9a8fbc6",
+      "name": "qdrant-eliminar-duplicado",
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.cloudflare.com/client/v4/accounts/16e36cece5147fb752daca5681dc24d0/ai/run/@cf/qwen/qwen2.5-coder-32b-instruct",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer vAM979SvPk2BHmmVHK1Kn6RPqNvgdFJqXjlkgKD4"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": {{ JSON.stringify($json.system_prompt) }}\n    },\n    {\n      \"role\": \"user\",\n      \"content\": {{ JSON.stringify($json.user_prompt) }}\n    }\n  ],\n  \"max_tokens\": 8000,\n  \"temperature\": 0.1\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2096,
+        288
+      ],
+      "id": "d50e116e-7454-4c2b-bd49-f7ba5ed5afff",
+      "name": "Cloudflare: LLM Llama 3.3",
+      "retryOnFail": true,
+      "continueOnFail": true,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const error = $input.first().json.error || {};\n\nreturn [{\n  json: {\n    success: false,\n    error: \"Error al generar respuesta del LLM\",\n    error_detalle: error.message || \"No se pudo generar la respuesta\",\n    data: {\n      fase: \"cloudflare_llm\"\n    }\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2320,
+        384
+      ],
+      "id": "defe39c3-f0b5-4888-a683-7d96292548f5",
+      "name": "Error: LLM"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseCode": 500
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        2544,
+        384
+      ],
+      "id": "ce57f488-f7c0-4ecf-ab5d-eba2f157c285",
+      "name": "Respond Error LLM"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "e78597f0-13ad-4741-b259-9bbb74c6bd81",
+              "name": "system_prompt",
+              "value": "Eres un asistente experto en extracción estructurada de información laboral y creación de chunks optimizados para embeddings en un sistema RAG para selección de talento. Tu tarea es transformar un CV en texto en chunks semánticos optimizados para búsquedas de perfiles profesionales.\n\nCRÍTICO: Tu respuesta COMPLETA debe ser JSON puro. NO uses ```json ni ningún formato markdown. El primer carácter debe ser { y el último }.\n\n### Objetivo\nConvertir el CV en un conjunto de chunks limpios, útiles y no redundantes, manteniendo la estructura semántica y sin incluir datos personales sensibles. Cada chunk debe ser autónomo y comprensible sin necesidad de contexto adicional.\n\n### Reglas generales\n- NO incluyas información personal: correos, teléfonos, direcciones, nombres de referencias\n- Elimina duplicados y contenido repetido\n- Mantén contexto laboral completo: empresa, rol, periodo, tecnologías, logros cuantificables\n- Cada chunk debe tener suficiente contexto para ser recuperado de forma independiente\n- Tamaño óptimo por chunk: 200-400 tokens (máximo 512)\n- Para experiencia laboral: crea 1 chunk por empresa/rol con contexto completo\n- Si una experiencia tiene muchas responsabilidades, agrúpalas temáticamente en subchunks\n- NO inventes información que no está en el CV\n- NO omitas tecnologías, herramientas, cursos o certificaciones que SÍ están mencionadas\n- NO agregues información que NO está mencionada\n- Usa lenguaje profesional y directo\n\n### Principios para embeddings efectivos\n- Incluye sinónimos y términos alternativos cuando sea relevante (ej: \"líder técnico / tech lead\")\n- Mantén nombres exactos de tecnologías para búsquedas precisas\n- Preserva niveles de seniority y años de experiencia cuando estén presentes\n- Agrupa tecnologías relacionadas para mejorar la recuperación semántica\n- Cada chunk debe responder: ¿qué hizo?, ¿dónde?, ¿con qué tecnologías?, ¿cuándo?\n\n### Extracción de tecnologías - CRÍTICO\nExtrae TODAS y SOLO las tecnologías que aparecen textualmente en el CV:\n- Revisa cada sección: experiencia laboral, competencias, secciones de tecnologías, nombres de cursos/certificaciones\n- Incluye todas las tecnologías mencionadas, sin importar cuántas sean\n- NO agregues tecnologías que no están escritas en el CV\n- NO inventes basándote en inferencias o contexto\n- Normaliza nombres cuando sea necesario (ejemplo: \"github\" → \"GitHub\", \"dotnet\" → \".NET Core\")\n\nSi no está explícitamente mencionado en el CV, no existe para ti.\n\n### Extracción de certificaciones y cursos - IMPORTANTE\nSi el CV incluye una sección de certificaciones, cursos, capacitaciones o formación complementaria:\n- Créale un chunk dedicado con section: \"certificaciones\"\n- Lista TODOS los cursos/certificaciones mencionados\n- Incluye el nombre del curso y la institución/plataforma cuando esté disponible\n- NO omitas ningún curso aunque haya muchos\n- Extrae las tecnologías mencionadas en los nombres de cursos y agrégalas a keywords\n- Si no existe esta sección en el CV, simplemente no crees el chunk\n\n### Estructura de chunks esperada\n1. perfil: Resumen profesional, rol actual, años de experiencia, seniority\n2. skills: Competencias técnicas agrupadas con TODAS las tecnologías mencionadas\n3. educacion: Formación académica universitaria con institución, título y periodo\n4. certificaciones: Cursos, certificaciones y formación complementaria (si existen)\n5. experiencia: 1 chunk por empresa/rol con contexto completo\n6. keywords: Lista COMPLETA de tecnologías que aparecen en el CV\n\n### Formato de salida\nEl JSON debe tener esta estructura:\n\n{\n  \"document_summary\": \"Resumen ejecutivo con rol, seniority, stack tecnológico y años de experiencia\",\n  \"chunks\": [\n    {\n      \"chunk_id\": \"perfil_1\",\n      \"section\": \"perfil\",\n      \"content\": \"texto del perfil profesional\"\n    },\n    {\n      \"chunk_id\": \"skills_1\",\n      \"section\": \"skills\",\n      \"content\": \"competencias técnicas organizadas\"\n    },\n    {\n      \"chunk_id\": \"education_1\",\n      \"section\": \"educacion\",\n      \"content\": \"formación académica universitaria\"\n    },\n    {\n      \"chunk_id\": \"certifications_1\",\n      \"section\": \"certificaciones\",\n      \"content\": \"certificaciones y cursos completados\"\n    },\n    {\n      \"chunk_id\": \"exp_N_empresa\",\n      \"section\": \"experiencia\",\n      \"content\": \"experiencia laboral\"\n    }\n  ],\n  \"keywords\": [\"tecnologías_del_CV_incluyendo_las_de_cursos\"]\n}\n\n### Lineamientos para optimizar embeddings\n- Redacta en tercera persona para consistencia\n- Incluye el contexto empresarial en cada chunk de experiencia\n- Mantén periodos en formato \"Mes Año - Mes Año\" o \"Año - Año\"\n- NO uses frases como \"el CV dice\" o \"según el documento\"\n- Normaliza nombres de tecnologías (.NET Core, no .net core ni dotnet)\n- Para keywords: incluye tecnologías de experiencia, skills Y certificaciones\n\n### Validación final\nAntes de responder, verifica que:\n- Cada chunk es autónomo y comprensible sin contexto adicional\n- No hay información personal sensible (teléfonos, emails, direcciones)\n- Ningún chunk excede 512 tokens\n- Si el CV tiene certificaciones/cursos, están en un chunk dedicado con section \"certificaciones\"\n- Las tecnologías mencionadas en cursos están en keywords\n- TODAS las tecnologías del CV están incluidas\n- NO hay tecnologías inventadas o inferidas\n- Los keywords no tienen duplicados\n- Cada experiencia laboral incluye: empresa, rol, periodo, tecnologías\n\nSi el CV no provee cierta sección, omítela del resultado.\n\nFORMATO DE RESPUESTA OBLIGATORIO: Responde SOLO con el objeto JSON. Sin bloques markdown, sin explicaciones. Primer carácter: { - Último carácter: }",
+              "type": "string"
+            },
+            {
+              "id": "b356ae94-c4ff-486e-9925-e42a7152bc12",
+              "name": "user_prompt",
+              "value": "=Transforma el siguiente CV en chunks para embeddings según las instrucciones del sistema:{{ $json.markdown }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1872,
+        288
+      ],
+      "id": "326e4ca4-8552-418a-b4d4-ef5196dc7256",
+      "name": "Prompt-llm"
+    },
+    {
+      "parameters": {
+        "jsCode": "const inputData = $('validación-campos').first();\n\n// Simplemente pasar los datos al siguiente nodo\nreturn [{\n  json: inputData.json,\n  ...inputData.binary && { binary: inputData.binary }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        528,
+        384
+      ],
+      "id": "2d083cae-9894-4182-9504-282bfcac0ccc",
+      "name": "preparar-datos"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "entrada": {
+      "main": [
+        [
+          {
+            "node": "estructurar-entrada",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "qdrant-eliminar-duplicado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "llamaparse-upload-doc": {
+      "main": [
+        [
+          {
+            "node": "Wait",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "llamaparse-error-formateo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait": {
+      "main": [
+        [
+          {
+            "node": "llamaparse-check-status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "llamaparse-check-status": {
+      "main": [
+        [
+          {
+            "node": "If1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If1": {
+      "main": [
+        [
+          {
+            "node": "llamaparse-markdown",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Wait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "llamaparse-markdown": {
+      "main": [
+        [
+          {
+            "node": "Prompt-llm",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "chunks-en-items": {
+      "main": [
+        [
+          {
+            "node": "Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "estructurar-entrada": {
+      "main": [
+        [
+          {
+            "node": "validación-campos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "validación-campos": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop": {
+      "main": [
+        [
+          {
+            "node": "Aggregate",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "cloudflare-embedding-generar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "cloudflare-embedding-generar": {
+      "main": [
+        [
+          {
+            "node": "embedding-vector-metadata",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "cloudflare-error-formateo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "embedding-vector-metadata": {
+      "main": [
+        [
+          {
+            "node": "Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate": {
+      "main": [
+        [
+          {
+            "node": "qdrant-estructura-request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "qdrant-estructura-request": {
+      "main": [
+        [
+          {
+            "node": "qdrant-insertar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "qdrant-insertar": {
+      "main": [
+        [
+          {
+            "node": "Respond-success",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "qdrant-error-insertar-formateo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "llamaparse-error-formateo": {
+      "main": [
+        [
+          {
+            "node": "llamaparse-error-upload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "cloudflare-error-formateo": {
+      "main": [
+        [
+          {
+            "node": "cloudflare-error-embedding",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "qdrant-error-eliminar-formateo": {
+      "main": [
+        [
+          {
+            "node": "qdrant-error-eliminar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "qdrant-error-insertar-formateo": {
+      "main": [
+        [
+          {
+            "node": "qdrant-error-insertar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "qdrant-eliminar-duplicado": {
+      "main": [
+        [
+          {
+            "node": "preparar-datos",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "qdrant-error-eliminar-formateo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Error: LLM": {
+      "main": [
+        [
+          {
+            "node": "Respond Error LLM",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cloudflare: LLM Llama 3.3": {
+      "main": [
+        [
+          {
+            "node": "chunks-en-items",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error: LLM",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prompt-llm": {
+      "main": [
+        [
+          {
+            "node": "Cloudflare: LLM Llama 3.3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "preparar-datos": {
+      "main": [
+        [
+          {
+            "node": "llamaparse-upload-doc",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "a2767284-af5e-4148-abf5-bc4a1e87dfcf",
+  "meta": {
+    "instanceId": "ea3a2191dd083f3463309ce1fd71d6ac10d38749f12af05ebf88e034ea7d7231"
+  },
+  "id": "AMEhm57hllKZNBKA",
+  "tags": []
+}

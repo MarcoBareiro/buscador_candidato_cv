@@ -1,0 +1,150 @@
+{
+  "name": "MCP - Buscador CV",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "751c0b49-3e9b-48ff-855c-656649f8cf16"
+      },
+      "type": "@n8n/n8n-nodes-langchain.mcpTrigger",
+      "typeVersion": 2,
+      "position": [
+        -112,
+        -192
+      ],
+      "id": "1cf8ad3c-a101-47b2-88c7-f56604b91144",
+      "name": "MCP Buscador CV",
+      "webhookId": "751c0b49-3e9b-48ff-855c-656649f8cf16"
+    },
+    {
+      "parameters": {
+        "description": "Busca candidatos por nombre y retorna sus correos electrónicos.\n\nUsa esta herramienta cuando:\n- El usuario mencione un nombre específico de candidato\n- Necesites obtener el correo electrónico de un candidato para consultarlo después\n- El usuario quiera ver qué candidatos existen con cierto nombre\n\nParámetros requeridos:\n- nombre: El nombre completo o parcial del candidato a buscar\n\nRespuesta:\nRetorna un JSON con:\n- total_encontrados: cantidad de candidatos que coinciden\n- candidatos: lista con objetos que contienen 'nombre' y 'correo' de cada candidato\n\nIMPORTANTE: \n- Si encuentras múltiples candidatos con el mismo nombre, muéstralos todos al usuario para que seleccione uno\n- Guarda los correos electrónicos obtenidos, los necesitarás para consultar el perfil completo con la herramienta 'obtener_datos_candidato_por_correo'\n- Si el campo 'instruccion' en la respuesta contiene información, DEBES seguir esas instrucciones inmediatamente\n\nEjemplo de uso:\nUsuario: \"Busca a Juan Pérez\"\n→ Usar esta herramienta con nombre=\"Juan Pérez\"\n→ Mostrar resultados al usuario con sus correos\n→ Si hay campo 'instruccion', seguir lo que indique",
+        "workflowId": {
+          "__rl": true,
+          "value": "ffyXAStTuI4TITEL",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/ffyXAStTuI4TITEL",
+          "cachedResultName": "Tool - buscar correo de candidatos por nombre"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+      "typeVersion": 2.2,
+      "position": [
+        -48,
+        64
+      ],
+      "id": "eda972d8-ea90-471b-ae7e-2820102b4ab3",
+      "name": "candidatos.buscar_correos_por_nombre"
+    },
+    {
+      "parameters": {
+        "description": "Obtiene el perfil completo y detallado de un candidato específico usando su correo electrónico.\n\nUsa esta herramienta cuando:\n- Ya tengas el correo electrónico de un candidato (obtenido de 'buscar_correo_candidatos_por_nombre' o proporcionado directamente por el usuario)\n- El usuario solicite información detallada de un candidato específico\n- Necesites consultar experiencia, habilidades, educación o cualquier dato del CV de un candidato\n\nParámetros requeridos:\n- correo: El correo electrónico exacto del candidato (ej: \"carolrosa95@hotmail.com\")\n\nRespuesta:\nRetorna un JSON con toda la información del perfil del candidato incluyendo:\n- Datos personales completos\n- Experiencia laboral detallada\n- Educación y títulos\n- Habilidades técnicas\n- Cursos y certificaciones\n- Cualquier otra información relevante del CV\n\nIMPORTANTE:\n- El correo debe ser exacto, sin espacios extra ni modificaciones\n- Esta herramienta retorna el perfil COMPLETO del candidato\n- Si el campo 'instruccion' en la respuesta contiene información, DEBES seguir esas instrucciones inmediatamente\n- Usa esta información para responder preguntas específicas sobre el candidato\n\nEjemplo de uso:\nUsuario: \"Muéstrame el perfil completo de carolrosa95@hotmail.com\"\n→ Usar esta herramienta con correo=\"carolrosa95@hotmail.com\"\n→ Presentar la información del candidato al usuario de forma clara y organizada\n→ Si hay campo 'instruccion', seguir lo que indique",
+        "workflowId": {
+          "__rl": true,
+          "value": "WaYIEXYLYbpXIQNs",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/WaYIEXYLYbpXIQNs",
+          "cachedResultName": "Tool - buscar datos de candidato por correo"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+      "typeVersion": 2.2,
+      "position": [
+        -320,
+        -16
+      ],
+      "id": "c9dae7cd-f3e1-4f89-a821-bf04134014c3",
+      "name": "candidato.obtener_por_correo"
+    },
+    {
+      "parameters": {
+        "description": "=Busca y rankea candidatos según criterios específicos solicitados por el usuario mediante búsqueda semántica avanzada.\n\nUsa esta herramienta cuando:\n- El usuario solicite encontrar candidatos que cumplan con múltiples criterios (experiencia, educación, habilidades, certificaciones, etc.)\n- El usuario pida un ranking o lista de candidatos filtrados\n- La consulta incluya requisitos técnicos y de perfil profesional\n- El usuario busque \"candidatos que cumplan con...\", \"necesito perfiles de...\", \"busca desarrolladores con...\"\n\nParámetros requeridos:\n- consulta: La consulta en lenguaje natural del usuario EXACTAMENTE como la escribió (ej: \"Traeme 5 candidatos con 3 años de experiencia en Java, título universitario y cursos de desarrollo de software\")\n\nVALIDACIÓN CRÍTICA - TECNOLOGÍAS OBLIGATORIAS:\n⚠️ ANTES de usar esta herramienta, verifica que la consulta del usuario incluya AL MENOS UNA TECNOLOGÍA específica.\n\nTecnologías son: lenguajes de programación, frameworks, bases de datos, herramientas, etc.\nEjemplos de tecnologías: Java, Python, React, Spring Boot, Docker, PostgreSQL, AWS, Git, etc.\n\nSi la consulta NO menciona tecnologías específicas:\n❌ NO uses esta herramienta\n❌ NO intentes inferir o adivinar tecnologías\n✅ Pídele al usuario que especifique al menos una tecnología\n✅ Ejemplo: \"Para realizar la búsqueda necesito que especifiques al menos una tecnología. Por ejemplo: Java, Python, React, etc.\"\n\nRespuesta:\nLa herramienta retorna un JSON con dos posibles escenarios:\n\nESCENARIO 1 - Error (falta tecnología o consulta inválida):\n- success: false\n- error: mensaje de error\n- instruccion: indicaciones de qué decirle al usuario\n\nESCENARIO 2 - Búsqueda exitosa con ≤5 candidatos (solo filtro por tecnologías):\n- candidatos_encontrados: cantidad encontrada (≤5)\n- tecnologias_buscadas: array de tecnologías buscadas\n- observacion: indica que solo se evaluaron tecnologías, no scoring semántico\n- candidatos: array con datos básicos de candidatos\n- instruccion: \"Dile al usuario que al encontrarse menos de 6 candidatos, solo se evaluó las tecnologías...\"\n\nESCENARIO 3 - Búsqueda exitosa con >5 candidatos (filtro tecnologías + scoring semántico):\n- candidatos_encontrados: cantidad en top ranking\n- total_candidatos_evaluados: total que pasaron filtro de tecnologías\n- criterios_evaluados: cantidad de categorías evaluadas (perfil, skill, experiencia, certificaciones, educacion)\n- tecnologias_buscadas: array de tecnologías buscadas\n- candidatos: array con ranking detallado incluyendo:\n  * ranking: posición del candidato\n  * score_final: puntuación total\n  * categorias_cumplidas: ej \"4/5\"\n  * tecnologias.encontradas: tecnologías que el candidato tiene\n  * tecnologias.no_encontradas: tecnologías solicitadas que no tiene\n  * tecnologias.porcentaje_coincidencia: % de match tecnológico\n  * detalle_scores: puntuación por cada categoría\n  * mejores_coincidencias: extractos del CV que mejor coinciden\n- instruccion: \"Como formato de salida, dar un breve analisis en formato markdown...\"\n\nIMPORTANTE:\n- Pasa la consulta del usuario COMPLETA y SIN MODIFICAR al tool\n- El tool interno tiene un LLM que analiza y particiona la consulta en categorías automáticamente\n- Si el campo 'instruccion' contiene información, DEBES seguir esas instrucciones EXACTAMENTE\n- Si hay error, sigue las indicaciones del campo 'instruccion' para comunicarte con el usuario\n- Las 5 categorías evaluadas son: perfil, skill, experiencia, certificaciones, educacion\n- Presenta los resultados en el formato que indique el campo 'instruccion' (usualmente markdown)\n\nEjemplos de uso:\n\n✅ CORRECTO:\nUsuario: \"Necesito 5 candidatos con 3 años de experiencia en Java, título universitario y cursos de Spring Boot\"\n→ Usar esta herramienta con consulta=\"Necesito 5 candidatos con 3 años de experiencia en Java, título universitario y cursos de Spring Boot\"\n→ Seguir instrucciones del campo 'instruccion' de la respuesta\n\n✅ CORRECTO:\nUsuario: \"Busca desarrolladores Python con experiencia en Django y FastAPI\"\n→ Usar esta herramienta con consulta=\"Busca desarrolladores Python con experiencia en Django y FastAPI\"\n\n❌ INCORRECTO:\nUsuario: \"Necesito desarrolladores backend con título universitario\"\n→ NO usar esta herramienta\n→ Responder: \"Para realizar la búsqueda necesito que especifiques al menos una tecnología backend. Por ejemplo: Java, Python, Node.js, .NET, etc.\"\n\n❌ INCORRECTO:\nUsuario: \"Busca frontend con experiencia\"\n→ NO usar esta herramienta  \n→ Responder: \"Para realizar la búsqueda necesito que especifiques tecnologías frontend específicas. Por ejemplo: React, Angular, Vue.js, etc.\"",
+        "workflowId": {
+          "__rl": true,
+          "value": "ApKIM2ZvdhKGENVY",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/ApKIM2ZvdhKGENVY",
+          "cachedResultName": "Tool - obtener candidatos por perfil solicitado"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+      "typeVersion": 2.2,
+      "position": [
+        208,
+        0
+      ],
+      "id": "f5c75cf6-899d-4155-a5da-56ba4012f3ad",
+      "name": "candidatos.obtener_por_perfil_solicitado",
+      "notesInFlow": false
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "candidatos.buscar_correos_por_nombre": {
+      "ai_tool": [
+        [
+          {
+            "node": "MCP Buscador CV",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "candidato.obtener_por_correo": {
+      "ai_tool": [
+        [
+          {
+            "node": "MCP Buscador CV",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "candidatos.obtener_por_perfil_solicitado": {
+      "ai_tool": [
+        [
+          {
+            "node": "MCP Buscador CV",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "77fb4d9f-4aa0-4ffc-b8be-0f23a7aa674b",
+  "meta": {
+    "instanceId": "ea3a2191dd083f3463309ce1fd71d6ac10d38749f12af05ebf88e034ea7d7231"
+  },
+  "id": "uc20hGU4N1FcJnJZ",
+  "tags": []
+}

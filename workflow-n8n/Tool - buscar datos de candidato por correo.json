@@ -1,0 +1,185 @@
+{
+  "name": "Tool - buscar datos de candidato por correo",
+  "nodes": [
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -192,
+        48
+      ],
+      "id": "b0a87c9b-08ad-4843-be47-b89cb41133f7",
+      "name": "When Executed by Another Workflow"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -416,
+        -144
+      ],
+      "id": "20fc9677-ae8b-4f3d-b0bc-ea5696446180",
+      "name": "When clicking ‘Execute workflow’"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Ignorar el input real y retornar query hardcoded para pruebas\nconst queryHardcoded = \"carolrosa95@hotmail.com\";\n\nreturn [{\n  json: {\n    query: queryHardcoded\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -192,
+        -144
+      ],
+      "id": "1ae5723e-be87-49d9-a3bd-d8c9ddb4aed1",
+      "name": "Datos de prueba"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://qdrant:6333/collections/curriculums_rag/points/scroll",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"filter\": {\n    \"must\": [\n      {\n        \"key\": \"persona_correo\",\n        \"match\": {\n          \"value\": {{ JSON.stringify($json.correo_buscado) }}\n        }\n      }\n    ]\n  },\n  \"limit\": 1000, \n  \"with_payload\": true,\n  \"with_vector\": false\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        256,
+        -48
+      ],
+      "id": "47ff8f0b-06f9-481c-89b3-e1ae331b3451",
+      "name": "HTTP: Qdrant Search - Búsqueda con filtro",
+      "retryOnFail": true,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const error = $input.first().json.error || {};\n\nreturn [{\n  json: {\n    success: false,\n    error: error.message || \"No se pudo conectar con Qdrant\",\n    data: null,\n    instruccion: \"muestrale el mensaje de error y sugiere que se puede hacer\"\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        48
+      ],
+      "id": "c62c42d7-c536-41e5-8ee5-b236d8c4c8c1",
+      "name": "Error: Qdrant Search - Búsqueda con filtro"
+    },
+    {
+      "parameters": {
+        "jsCode": "const correoIngresado = $input.first().json.query || \"\";\n\n// Validar formato de correo\nconst emailRegex = /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/;\n\nif (!correoIngresado || !emailRegex.test(correoIngresado)) {\n  return [{\n    json: {\n      success: false,\n      error: \"Correo electrónico inválido o no proporcionado\",\n      data: null,\n      instruccion: \"Si no tienes un correo válido, pidele al usuario que te proporcione uno\"\n    }\n  }];\n}\n\nreturn [{\n  json: {\n    correo_buscado: correoIngresado\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        32,
+        -48
+      ],
+      "id": "339fef32-c5ef-4417-94fa-15c341dbe568",
+      "name": "Validar y preparar consulta por correo"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\nconst correo = $('Validar y preparar consulta por correo').first().json.correo_buscado;\n\n// Verificar si Qdrant devolvió resultados\nconst points = input.result?.points || input.points || [];\n\nif (points.length === 0) {\n  return [{\n    json: {\n      success: false,\n      error: \"No se encontró ningún candidato con ese correo\",\n      data: {\n        correo_buscado: correo\n      },\n      instruccion: \"muestrale el mensaje de error y sugiere que revise el correo proporcionado\"\n    }\n  }];\n}\n\n// Extraer información común (del primer chunk)\nconst primerChunk = points[0].payload;\nconst candidato = {\n  nombre: primerChunk.persona_nombre_apellido || \"N/A\",\n  correo: primerChunk.persona_correo || \"N/A\",\n  telefono: primerChunk.persona_telefono || \"N/A\",\n  cargo_postulante: primerChunk.trabajo_cargo_postulante || \"N/A\",\n  modalidad: primerChunk.trabajo_modalidad || \"N/A\",\n  expectativa_salarial: primerChunk.trabajo_espectativa_salarial || \"N/A\",\n  grupo: primerChunk.grupo_nombre || \"N/A\"\n};\n\n// Agrupar chunks por sección\nconst seccionesMap = {};\n\nfor (const point of points) {\n  const payload = point.payload;\n  const seccion = payload.seccion || \"sin_seccion\";\n  const texto = payload.text || \"\";\n  \n  if (!seccionesMap[seccion]) {\n    seccionesMap[seccion] = [];\n  }\n  \n  seccionesMap[seccion].push({\n    documento: payload.documento_nombre || \"N/A\",\n    texto: texto.trim()\n  });\n}\n\n// Consolidar texto por sección\nconst secciones = {};\nfor (const [nombreSeccion, chunks] of Object.entries(seccionesMap)) {\n  // Unir todos los textos de la misma sección\n  const textoCompleto = chunks\n    .map(c => c.texto)\n    .filter(t => t.length > 0)\n    .join(\"\\n\\n\");\n  \n  secciones[nombreSeccion] = {\n    total_chunks: chunks.length,\n    texto_completo: textoCompleto\n  };\n}\n\n// Construir respuesta unificada\nconst resultado = {\n  encontrado: true,\n  total_chunks_procesados: points.length,\n  datos_personales: candidato,\n  contenido_cv: secciones,\n  // Resumen de secciones disponibles\n  secciones_disponibles: Object.keys(secciones)\n};\n\nreturn [{\n  json: {\n    success: true,\n    error: null,\n    data: resultado,\n    instruccion: null\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        -144
+      ],
+      "id": "769271e5-2e16-442d-aed2-9c8be99a2891",
+      "name": "Unificar chunks y construir perfil completo"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "Datos de prueba",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Datos de prueba": {
+      "main": [
+        [
+          {
+            "node": "Validar y preparar consulta por correo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP: Qdrant Search - Búsqueda con filtro": {
+      "main": [
+        [
+          {
+            "node": "Unificar chunks y construir perfil completo",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error: Qdrant Search - Búsqueda con filtro",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "Validar y preparar consulta por correo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validar y preparar consulta por correo": {
+      "main": [
+        [
+          {
+            "node": "HTTP: Qdrant Search - Búsqueda con filtro",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "a2b4898e-3860-42b6-9b56-e8bad593af34",
+  "meta": {
+    "instanceId": "ea3a2191dd083f3463309ce1fd71d6ac10d38749f12af05ebf88e034ea7d7231"
+  },
+  "id": "WaYIEXYLYbpXIQNs",
+  "tags": []
+}

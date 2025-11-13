@@ -1,0 +1,908 @@
+{
+  "name": "Tool - obtener candidatos por perfil solicitado",
+  "nodes": [
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -2352,
+        1008
+      ],
+      "id": "e4854d0b-3c7c-461b-9594-6172940612ab",
+      "name": "When Executed by Another Workflow"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -2576,
+        816
+      ],
+      "id": "d8d1b495-a435-4ff1-a382-f8dbb3798193",
+      "name": "When clicking ‘Execute workflow’"
+    },
+    {
+      "parameters": {
+        "jsCode": "const categorias = $('Cloudflare: LLM Llama 3.').first().json.result.response\nconst candidatos = $('Formatear Candidatos Encontrados').first().json.candidatos\n\n// Extraer array de correos de los candidatos del Tool 1\nconst correosArray = candidatos.map(c => c.persona_correo);\n\n// Convertir categorías a array, filtrando \"no especificado\"\nconst categoriasArray = [];\n\nfor (const [nombre, valor] of Object.entries(categorias)) {\n  if(nombre === \"requiere_aclaracion\" || nombre === \"tecnologia\" || nombre === \"correos_excluidos\"){\n    continue;\n  }\n  \n  if (valor && valor.toLowerCase() !== \"no especificado\") {\n    categoriasArray.push({\n      nombre: nombre,\n      query: valor,\n      correos: correosArray \n    });\n  }\n}\n\n// Retornar array de categorías para el loop\nreturn categoriasArray.map(cat => ({ json: cat }));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -112,
+        432
+      ],
+      "id": "ef24cfce-4814-4fa0-85b0-61f7d68278a3",
+      "name": "Preparar Categorías para Loop"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        112,
+        432
+      ],
+      "id": "73a031b4-152a-4c2b-9ac8-44b813451dc0",
+      "name": "Loop por Categoría"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.cloudflare.com/client/v4/accounts/16e36cece5147fb752daca5681dc24d0/ai/run/@cf/baai/bge-large-en-v1.5",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer vAM979SvPk2BHmmVHK1Kn6RPqNvgdFJqXjlkgKD4"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"text\": \"{{ $('Preparar Categorías para Loop').item.json.query }}\"\n}",
+        "options": {
+          "redirect": {
+            "redirect": {}
+          },
+          "response": {
+            "response": {}
+          },
+          "timeout": 30000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        336,
+        528
+      ],
+      "id": "8978ae9f-cb9a-426a-9478-22bb6af04f4c",
+      "name": "cloudflare-embedding-generar",
+      "retryOnFail": true,
+      "waitBetweenTries": 3000,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const error = $input.first().json.error || {};\n\nreturn [{\n  json: {\n    success: false,\n    error: error.message || \"Cloudflare no pudo generar el vector embedding\",\n    data: null,\n    instruccion: \"Muestrale el mensaje de error y dile al usuario que debido al error debe comunicarse con el administrador del sistema para atender el problema\"\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        560,
+        624
+      ],
+      "id": "1c313058-1220-416a-9595-50c938c39462",
+      "name": "cloudflare-error-formateo"
+    },
+    {
+      "parameters": {
+        "jsCode": "const error = $input.first().json.error || {};\n\nreturn [{\n  json: {\n    success: false,\n    error: error.message || \"No se pudo generar la respuesta\",\n    data: null,\n    instruccion: \"muestrale el mensaje de error y sugiere que se puede hacer\"\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1680,
+        1008
+      ],
+      "id": "d8399a27-bb08-4497-952c-a19f0124e95f",
+      "name": "Error: LLM"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://qdrant:6333/collections/curriculums_rag/points/search",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"vector\": [{{ $json.result.data[0] }}],\n  \"vector_name\": \"vector\",\n  \"filter\": {\n    \"must\": [\n      {\n        \"key\": \"persona_correo\",\n        \"match\": {\n          \"any\": {{ JSON.stringify($('Loop por Categoría').item.json.correos) }}\n        }\n      },\n      {\n        \"key\": \"seccion\",\n        \"match\": {\n          \"value\": {{ JSON.stringify($('Loop por Categoría').item.json.nombre) }}\n        }\n      },\n      {\n        \"key\": \"grupo_nombre\",\n        \"match\": { \"value\": \"cv_desarrrollo\" }\n      }\n    ]\n  },\n  \"limit\": {{ $('Loop por Categoría').item.json.nombre === 'experiencia' ? 200 : 50 }},\n  \"score_threshold\": 0.7,\n  \"with_payload\": true\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        560,
+        432
+      ],
+      "id": "9a303ea4-17a1-40b3-919d-b5e8fe8aabf2",
+      "name": "HTTP: Qdrant Search - perfil",
+      "retryOnFail": true,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const error = $input.first().json.error || {};\n\nreturn [{\n  json: {\n    success: false,\n    error: error.message || \"No se pudo conectar con Qdrant\",\n    data: null,\n    instruccion: \"muestrale el mensaje de error y sugiere que se puede hacer\" \n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        784,
+        528
+      ],
+      "id": "048e70e6-4cf1-4ddc-adef-0ef5702e085b",
+      "name": "Error: Qdrant Search - perfil"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "ba583d51-8dcf-447a-b82f-da74e9ce5ed0",
+              "leftValue": "={{ $('Loop por Categoría').item.json.nombre }}",
+              "rightValue": "experiencia",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1008,
+        336
+      ],
+      "id": "e4c0ba32-409d-4e63-ac52-d163763fd7b8",
+      "name": "¿Es Experiencia?"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Input: Respuesta de Qdrant\nconst qdrantResponse = $input.first().json;\nconst categoria = $('Loop por Categoría').first().json.nombre // Nombre de la categoría actual\n\n// Extraer resultados del formato de Qdrant\nconst resultados = qdrantResponse.result || [];\n\n// Si no hay resultados, retornar array vacío\nif (resultados.length === 0) {\n  return [];\n}\n\n// Mapear resultados a formato uniforme\nconst resultadosFormateados = resultados.map(item => ({\n  categoria: categoria,\n  correo: item.payload.persona_correo,\n  nombre: item.payload.persona_nombre_apellido,\n  trabajo_postulacion: item.payload.trabajo_cargo_postulante,\n  trabajo_modalidad: item.payload.trabajo_modalidad,\n  trabajo_espectativa_salarial: item.payload.trabajo_espectativa_salarial,\n  score: item.score,\n  seccion: item.payload.seccion,\n  texto: item.payload.text,\n  id: item.id\n}));\n\nreturn resultadosFormateados.map(r => ({ json: r }));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        784,
+        336
+      ],
+      "id": "0113ff24-9576-44cd-9e2a-1283ea435337",
+      "name": "Extraer Resultados de Qdrant"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Input: Array de resultados de experiencia (puede haber múltiples items del mismo correo)\nconst items = $input.all();\n\n// Si no hay items, retornar vacío\nif (items.length === 0) {\n  return [];\n}\n\n// Agrupar por correo y tomar MAX score\nconst agrupado = {};\n\nfor (const item of items) {\n  const correo = item.json.correo;\n  const score = item.json.score;\n  \n  // Si el correo no existe o el score actual es mayor, actualizar\n  if (!agrupado[correo] || score > agrupado[correo].score) {\n    agrupado[correo] = {\n      categoria: item.json.categoria,\n      correo: correo,\n      nombre: item.json.nombre,\n      trabajo_postulacion: item.json.trabajo_postulacion,\n      trabajo_modalidad: item.json.trabajo_modalidad,\n      trabajo_espectativa_salarial: item.json.trabajo_espectativa_salarial,\n      score: score,\n      seccion: item.json.seccion,\n      mejor_match_texto: item.json.texto,  // Guardamos el texto del puesto con mejor match\n      id: item.json.id\n    };\n  }\n}\n\n// Convertir objeto a array\nreturn Object.values(agrupado).map(item => ({ json: item }));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1232,
+        240
+      ],
+      "id": "dc784bf1-e024-474d-8ab8-018232fcf30f",
+      "name": "Agrupar Experiencia - MAX Score"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1232,
+        432
+      ],
+      "id": "39933487-6bd7-4b0c-acb9-4c2ca1a221e0",
+      "name": "Pass Through - Otras Categorías"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        1456,
+        608
+      ],
+      "id": "81b508b0-c7be-43e9-9945-19accf5ce244",
+      "name": "Merge"
+    },
+    {
+      "parameters": {
+        "aggregate": "aggregateAllItemData",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.aggregate",
+      "typeVersion": 1,
+      "position": [
+        336,
+        144
+      ],
+      "id": "b4277504-f54a-4e51-804e-17e36b463a58",
+      "name": "Consolidar Todos los Resultados"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Input: Array con estructura {data: [...]}\nconst inputItems = $input.all();\n\n// Extraer todos los items del array data\nlet items = [];\nfor (const inputItem of inputItems) {\n  if (inputItem.json.data && Array.isArray(inputItem.json.data)) {\n    items = items.concat(inputItem.json.data);\n  }\n}\n\n// Si no hay items, retornar vacío\nif (items.length === 0) {\n  return [{\n    json: {\n      success: true,\n      candidatos_encontrados: 0,\n      mensaje: \"No se encontraron candidatos que cumplan con los criterios especificados\",\n      candidatos: []\n    }\n  }];\n}\n\n// Contar cuántas categorías se buscaron\nconst categoriasBuscadas = new Set();\nitems.forEach(item => {\n  if (item.categoria) {\n    categoriasBuscadas.add(item.categoria);\n  }\n});\nconst totalCategoriasBuscadas = categoriasBuscadas.size;\n\n// Agrupar por correo\nconst candidatosPorCorreo = {};\n\nfor (const item of items) {\n  const correo = item.correo;\n  \n  if (!candidatosPorCorreo[correo]) {\n    candidatosPorCorreo[correo] = {\n      correo: correo,\n      nombre: item.nombre,\n      trabajo_postulacion: item.trabajo_postulacion,\n      trabajo_modalidad: item.trabajo_modalidad,\n      trabajo_espectativa_salarial: item.trabajo_espectativa_salarial,\n      scores_por_categoria: {},\n      textos_por_categoria: {}, // Guardar los textos que mejor matchearon\n      total_categorias_matcheadas: 0\n    };\n  }\n  \n  // Guardar score por categoría (solo si no existe o es mayor)\n  const categoria = item.categoria;\n  const score = item.score;\n  \n  if (!candidatosPorCorreo[correo].scores_por_categoria[categoria] || \n      score > candidatosPorCorreo[correo].scores_por_categoria[categoria]) {\n    candidatosPorCorreo[correo].scores_por_categoria[categoria] = score;\n    candidatosPorCorreo[correo].textos_por_categoria[categoria] = item.texto;\n  }\n}\n\n// Calcular scores finales\nconst candidatosFinales = Object.values(candidatosPorCorreo).map(candidato => {\n  const scores = Object.values(candidato.scores_por_categoria);\n  const totalCategoriasMatcheadas = scores.length;\n  \n  // Score promedio de las categorías que matchearon\n  const scorePromedio = scores.reduce((sum, s) => sum + s, 0) / totalCategoriasMatcheadas;\n  \n  // Completitud: qué porcentaje de las categorías buscadas cumplió\n  const completitud = totalCategoriasMatcheadas / totalCategoriasBuscadas;\n  \n  // Score final ponderado (promedio * completitud)\n  const scoreFinal = scorePromedio * completitud;\n  \n  return {\n    correo: candidato.correo,\n    nombre: candidato.nombre,\n    trabajo_postulacion: candidato.trabajo_postulacion,\n    trabajo_modalidad: candidato.trabajo_modalidad,\n    trabajo_espectativa_salarial: candidato.trabajo_espectativa_salarial,\n    score_promedio: Math.round(scorePromedio * 1000) / 1000,\n    categorias_matcheadas: totalCategoriasMatcheadas,\n    categorias_buscadas: totalCategoriasBuscadas,\n    completitud: Math.round(completitud * 100) / 100,\n    score_final: Math.round(scoreFinal * 1000) / 1000,\n    detalle_scores: candidato.scores_por_categoria,\n    mejores_matches: candidato.textos_por_categoria\n  };\n});\n\nreturn candidatosFinales.map(c => ({ json: c }));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        560,
+        144
+      ],
+      "id": "22bde822-fca1-45f1-8919-9ec1cd4023b7",
+      "name": "Calcular Score Final"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Input: Array de candidatos con scores\nconst candidatos = $input.all().map(item => item.json);\n\n// Obtener datos de tecnologías desde \"Formatear respuesta\"\nconst datosTecnologias = $('Formatear Candidatos Encontrados').first().json;\nconst candidatosTecnologias = datosTecnologias.candidatos || [];\n\nconsole.log('=== TOP 5 CANDIDATOS ===');\nconsole.log('Total candidatos con scores:', candidatos.length);\nconsole.log('Total candidatos con tecnologías:', candidatosTecnologias.length);\n\n// Crear un mapa de tecnologías por correo para acceso rápido\nconst tecnologiasPorCorreo = {};\ncandidatosTecnologias.forEach(candidato => {\n  tecnologiasPorCorreo[candidato.persona_correo] = {\n    tecnologias_encontradas: candidato.tecnologias_encontradas || [],\n    tecnologias_no_encontradas: candidato.tecnologias_no_encontradas || [],\n    total_tecnologias_match: candidato.total_tecnologias_match || 0,\n    porcentaje_coincidencia: candidato.porcentaje_coincidencia || 0\n  };\n});\n\nconsole.log('Mapa de tecnologías creado para', Object.keys(tecnologiasPorCorreo).length, 'candidatos');\n\n// Si no hay candidatos\nif (candidatos.length === 0) {\n  return [{\n    json: {\n      success: true,\n      error: null,\n      data: {\n        candidatos_encontrados: 0,\n        mensaje: \"No se encontraron candidatos que cumplan con los criterios semánticos especificados.\",\n        candidatos: []\n      },\n      instruccion: \"Dile al usuario que no se encontraron candidatos que cumplan con los criterios especificados, sugierele que modifique su consulta con menos criterios a evaluar. Como formato de salida, dar un breve analisis en formato markdown con los datos proporcionados en el campo data de la respuesta.\"\n    }\n  }];\n}\n\n// Ordenar por score_final descendente\ncandidatos.sort((a, b) => b.score_final - a.score_final);\n\n// Tomar top 5\nconst top5 = candidatos.slice(0, 5);\n\n// Formatear respuesta final\nconst respuestaFinal = {\n  success: true,\n  error: null,\n  data: {\n    candidatos_encontrados: top5.length,\n    total_candidatos_evaluados: candidatos.length,\n    criterios_evaluados: top5.length > 0 ? top5[0].categorias_buscadas : 0,\n    tecnologias_buscadas: datosTecnologias.tecnologias_buscadas || [],\n    correos_excluidos: $('Cloudflare: LLM Llama 3.').first().json.result.response.correos_excluidos,\n    candidatos: top5.map((c, index) => {\n      // Buscar información de tecnologías para este candidato\n      const infoTecnologias = tecnologiasPorCorreo[c.correo] || {\n        tecnologias_encontradas: [],\n        tecnologias_no_encontradas: datosTecnologias.tecnologias_buscadas || [],\n        total_tecnologias_match: 0,\n        porcentaje_coincidencia: 0\n      };\n      \n      console.log(`Candidato ${c.nombre} - Tecnologías match: ${infoTecnologias.total_tecnologias_match}`);\n      \n      return {\n        ranking: index + 1,\n        nombre: c.nombre,\n        correo: c.correo,\n        trabajo_postulacion: c.trabajo_postulacion,\n        trabajo_modalidad: c.trabajo_modalidad,\n        trabajo_espectativa_salarial: c.trabajo_espectativa_salarial,\n        score_final: c.score_final,\n        score_promedio: c.score_promedio,\n        completitud_porcentaje: Math.round(c.completitud * 100),\n        categorias_cumplidas: `${c.categorias_matcheadas}/${c.categorias_buscadas}`,\n        tecnologias: {\n          encontradas: infoTecnologias.tecnologias_encontradas,\n          no_encontradas: infoTecnologias.tecnologias_no_encontradas,\n          total_match: infoTecnologias.total_tecnologias_match,\n          porcentaje_coincidencia: infoTecnologias.porcentaje_coincidencia\n        },\n        detalle_scores: c.detalle_scores,\n        mejores_coincidencias: c.mejores_matches\n      };\n    }),\n    observacion: `Se evaluaron ${candidatos.length} candidatos según ${top5.length > 0 ? top5[0].categorias_buscadas : 0} criterios. Top ${top5.length} candidatos seleccionados por mejor puntuación combinada.`\n  },\n  instruccion: \"Como formato de salida, dar un breve analisis en formato markdown con los datos proporcionados en el campo data de la respuesta. Sugierele al usuario si quiere obtener otros candidatos pidiendole que agregue los correos que no quiera que se incluyan en la proxima consulta. Ejemplo: Encontré 5 candidatos. Si quieres ver otros, dime 'muéstrame más excluyendo a [correo1], [correo2]\"\n};\n\nreturn [{ json: respuestaFinal }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        784,
+        144
+      ],
+      "id": "968fae9a-1523-4d0e-90af-f95f48daa45b",
+      "name": "Top 5 Candidatos"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c7450c92-fffb-4f60-9e78-6958fb4ec7a0",
+              "leftValue": "={{ $json.candidatos_encontrados }}",
+              "rightValue": 5,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -336,
+        528
+      ],
+      "id": "52a0fe38-a0c9-4d7d-b0f5-dd6aa6cf321d",
+      "name": "¿Existe mas de 5 candidatos?"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.cloudflare.com/client/v4/accounts/16e36cece5147fb752daca5681dc24d0/ai/run/@cf/qwen/qwen2.5-coder-32b-instruct",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer vAM979SvPk2BHmmVHK1Kn6RPqNvgdFJqXjlkgKD4"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": {{ JSON.stringify($json.system_prompt) }}\n    },\n    {\n      \"role\": \"user\",\n      \"content\": {{ JSON.stringify($json.user_prompt) }}\n    }\n  ],\n  \"max_tokens\": 8000,\n  \"temperature\": 0.1\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -1904,
+        912
+      ],
+      "id": "c7c2f863-07a9-484f-a212-b7d8a86179bd",
+      "name": "Cloudflare: LLM Llama 3.",
+      "retryOnFail": true,
+      "continueOnFail": true,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "e78597f0-13ad-4741-b259-9bbb74c6bd81",
+              "name": "system_prompt",
+              "value": "Eres un asistente especializado en análisis y extracción de requisitos técnicos para búsqueda de talento en desarrollo de software.\n\nTu objetivo es procesar consultas de usuarios sobre perfiles profesionales y convertirlas en una estructura JSON estandarizada para búsqueda híbrida (filtrado exacto + búsqueda semántica).\n\n=== ESTRUCTURA DE SALIDA ===\n\nDebes extraer información en 6 categorías específicas:\n\n1.  **tecnologia**: String de tecnologías separadas por comas (lenguajes, frameworks, herramientas, metodologías)\n2.  **perfil**: Descripción del rol, tipo de profesional, características generales\n3.  **educacion**: Nivel académico, títulos, carreras\n4.  **certificaciones**: Certificaciones técnicas, cursos formales específicos\n5.  **experiencia**: Años de experiencia, seniority, tipo de proyectos\n6.  **correos_excluidos**: Array de correos electrónicos a excluir de la búsqueda\n    \n\n=== REGLAS CRÍTICAS ===\n\n**Para \"tecnologia\" (OBLIGATORIO):**\n\n*   Es un string con tecnologías separadas por comas: \"Java, Spring Boot, PostgreSQL\"\n*   Incluye: lenguajes de programación, frameworks, bases de datos, herramientas, metodologías ágiles, clouds\n*   Normaliza nombres: \"JS\" → \"JavaScript\", \"React.js\" → \"React\", \"PostgreSQL\" → \"Postgres\"\n*   **CRÍTICO:** Si el usuario NO menciona tecnologías específicas, NO puedes continuar\n    *   Si solo dice \"backend\", \"frontend\", \"fullstack\", \"desarrolladores\" sin especificar tecnologías\n    *   Debes responder con un JSON especial solicitando aclaración\n*   NO incluyas palabras genéricas como \"desarrollo\", \"programación\", \"software\"\n*   Ejemplos válidos: \"Java, Spring Boot, PostgreSQL, Docker, AWS\"\n*   Sin espacios extra: ✅ \"Java, React\" | ❌ \"Java , React\" | ❌ \"Java,React\"\n\n**Para las demás categorías (perfil, educacion, certificaciones, experiencia):**\n\n*   NO incluyas nombres de tecnologías específicas\n*   Sustituye tecnologías por términos genéricos:\n    *   ✅ \"Experiencia en desarrollo backend con arquitecturas escalables\"\n    *   ❌ \"Experiencia en Java y Spring Boot\"\n*   Enfócate en habilidades humanas, tipo de trabajo, contexto profesional\n*   Si la categoría no se menciona en la consulta: usa \"no especificado\"\n*   Texto conciso, máximo 2-3 líneas por categoría\n*   Orientado a búsqueda semántica (usa lenguaje descriptivo y rico en contexto)\n\n**Para \"experiencia\":**\n\n*   Extrae años de experiencia si se mencionan: \"3 años\", \"5+ años\", \"senior (7+ años)\"\n*   Incluye tipo de experiencia: \"desarrollo web\", \"arquitectura de software\", \"liderazgo técnico\"\n*   NO repitas tecnologías específicas aquí\n\n**Para \"educacion\":**\n\n*   Extrae nivel: \"universitario\", \"técnico\", \"postgrado\", \"maestría\", \"doctorado\"\n*   Estado: \"concluido\", \"en curso\", \"trunco\"\n*   Área general si se menciona: \"Ingeniería en Sistemas\", \"Ciencias de la Computación\"\n\n**Para \"certificaciones\":**\n\n*   Solo si se mencionan explícitamente cursos o certificaciones formales\n*   Ejemplos: \"certificaciones en cloud computing\", \"cursos de desarrollo de software\"\n*   NO incluyas nombres de plataformas o tecnologías específicas aquí\n\n**Para \"correos_excluidos\" (OPCIONAL):**\n\n*   Es un array de strings con correos electrónicos a excluir de los resultados\n*   Se usa cuando el usuario quiere excluir candidatos que ya revisó o entrevistó\n*   Formato: [\"correo1@example.com\", \"correo2@example.com\"]\n*   Si no se mencionan correos para excluir: usar array vacío []\n*   El usuario puede expresarlo de varias formas:\n    *   \"sin considerar a juan@mail.com y maria@mail.com\"\n    *   \"excluyendo los correos: ...\"\n    *   \"que no incluya a [lista de correos]\"\n    *   \"dame otros candidatos diferentes a [correos]\"\n    *   \"sin [correo1], [correo2]\"\n    *   \"excepto [correos]\"\n*   Extrae SOLO los correos electrónicos válidos (deben contener @)\n*   Si el usuario dice \"dame otros\", \"diferentes\", \"más candidatos\" pero NO proporciona correos específicos:\n    *   Dejar el array vacío []\n    *   NO asumir ni inventar correos\n\n=== FORMATO DE SALIDA ===\n\nOBLIGATORIO: Responde ÚNICAMENTE con JSON válido, sin texto adicional, sin markdown, sin comentarios.\n\n**Caso normal (con tecnologías especificadas):**{\"requiere_aclaracion\": false,\"tecnologia\": \"tech1, tech2, tech3\",\"perfil\": \"texto descriptivo\" o \"no especificado\",\"educacion\": \"texto descriptivo\" o \"no especificado\",\"certificaciones\": \"texto descriptivo\" o \"no especificado\",\"experiencia\": \"texto descriptivo\" o \"no especificado\",\"correos_excluidos\": []}\n\n**Caso especial (sin tecnologías especificadas):**{\"requiere_aclaracion\": true,\"mensaje\": \"Para realizar la búsqueda necesito que especifiques al menos una tecnología. Por ejemplo: ¿buscas desarrolladores con Java, Python, JavaScript, React, Angular, .NET, PHP, o alguna otra tecnología específica?\",\"contexto_detectado\": \"breve resumen de lo que entendiste de la consulta\"}\n\n=== EJEMPLOS ===\n\n**Entrada 1:**\"Necesito 5 desarrolladores backend con 3+ años de experiencia en Java y Spring Boot, título universitario y que hayan trabajado en e-commerce\"\n\n**Salida 1:**{\"requiere_aclaracion\": false,\"tecnologia\": \"Java, Spring Boot\",\"perfil\": \"Desarrollador backend especializado en aplicaciones e-commerce\",\"educacion\": \"Título universitario concluido\",\"certificaciones\": \"no especificado\",\"experiencia\": \"3 o más años de experiencia en desarrollo backend con proyectos de comercio electrónico\",\"correos_excluidos\": []}\n\n**Entrada 2:**\"Busco un frontend senior con React, que tenga certificación en AWS y maestría\"\n\n**Salida 2:**{\"requiere_aclaracion\": false,\"tecnologia\": \"React, AWS\",\"perfil\": \"Desarrollador frontend senior\",\"educacion\": \"Maestría concluida\",\"certificaciones\": \"Certificación en servicios cloud\",\"experiencia\": \"Experiencia senior en desarrollo de interfaces de usuario\",\"correos_excluidos\": []}\n\n**Entrada 3:**\"Desarrollador fullstack con conocimientos en bases de datos y APIs, recién graduado\"\n\n**Salida 3:**{\"requiere_aclaracion\": true,\"mensaje\": \"Para realizar la búsqueda necesito que especifiques al menos una tecnología. Por ejemplo: ¿buscas desarrolladores con Java, Python, JavaScript, React, Angular, .NET, PHP, Node.js, o alguna otra tecnología específica?\",\"contexto_detectado\": \"Buscas un desarrollador fullstack recién graduado con experiencia en APIs y bases de datos\"}\n\n**Entrada 4:**\"Necesito un tech lead con experiencia en arquitectura de microservicios, Docker, Kubernetes y que haya liderado equipos\"\n\n**Salida 4:**{\"requiere_aclaracion\": false,\"tecnologia\": \"Docker, Kubernetes\",\"perfil\": \"Tech lead con experiencia en liderazgo técnico y arquitectura de sistemas distribuidos\",\"educacion\": \"no especificado\",\"certificaciones\": \"no especificado\",\"experiencia\": \"Experiencia en diseño de arquitecturas escalables y gestión de equipos de desarrollo\",\"correos_excluidos\": []}\n\n**Entrada 5:**\"Traeme desarrolladores backend que sepan trabajar con APIs REST y tengan cursos de desarrollo de software\"\n\n**Salida 5:**{\"requiere_aclaracion\": true,\"mensaje\": \"Para realizar la búsqueda necesito que especifiques al menos una tecnología para backend. Por ejemplo: ¿buscas desarrolladores con Java, Python, Node.js, .NET, PHP, Go, Ruby, o alguna otra tecnología específica?\",\"contexto_detectado\": \"Buscas desarrolladores backend con experiencia en APIs REST y cursos de desarrollo\"}\n\n**Entrada 6:**\"Desarrolladores con experiencia en microservicios\"\n\n**Salida 6:**{\"requiere_aclaracion\": true,\"mensaje\": \"Para realizar la búsqueda necesito que especifiques al menos una tecnología. Por ejemplo: ¿los microservicios deben estar desarrollados con Java, Python, Node.js, .NET, Go, o alguna otra tecnología específica?\",\"contexto_detectado\": \"Buscas desarrolladores con experiencia en arquitectura de microservicios\"}\n\n**Entrada 7:**\"Senior backend developer con Postgres, Redis y experiencia en sistemas de alta disponibilidad\"\n\n**Salida 7:**{\"requiere_aclaracion\": false,\"tecnologia\": \"PostgreSQL, Redis\",\"perfil\": \"Desarrollador backend senior especializado en sistemas de alta disponibilidad\",\"educacion\": \"no especificado\",\"certificaciones\": \"no especificado\",\"experiencia\": \"Experiencia senior en arquitecturas resilientes y bases de datos de alto rendimiento\",\"correos_excluidos\": []}\n\n**Entrada 8:**\"Necesito desarrolladores Python con Django, pero sin considerar a juan.perez@gmail.com y maria.lopez@hotmail.com que ya entrevisté\"\n\n**Salida 8:**{\"requiere_aclaracion\": false,\"tecnologia\": \"Python, Django\",\"perfil\": \"Desarrollador backend\",\"educacion\": \"no especificado\",\"certificaciones\": \"no especificado\",\"experiencia\": \"no especificado\",\"correos_excluidos\": [\"juan.perez@gmail.com\", \"maria.lopez@hotmail.com\"]}\n\n**Entrada 9:**\"Busco frontend con React y TypeScript, excluyendo a carlos@dev.com\"\n\n**Salida 9:**{\"requiere_aclaracion\": false,\"tecnologia\": \"React, TypeScript\",\"perfil\": \"Desarrollador frontend\",\"educacion\": \"no especificado\",\"certificaciones\": \"no especificado\",\"experiencia\": \"no especificado\",\"correos_excluidos\": [\"carlos@dev.com\"]}\n\n**Entrada 10:**\"Muéstrame otros desarrolladores Java diferentes\"\n\n**Salida 10:**{\"requiere_aclaracion\": false,\"tecnologia\": \"Java\",\"perfil\": \"Desarrollador backend\",\"educacion\": \"no especificado\",\"certificaciones\": \"no especificado\",\"experiencia\": \"no especificado\",\"correos_excluidos\": []}\n\n=== VALIDACIONES FINALES ===\n\nAntes de responder, verifica:\n✅ El JSON es válido (puedes parsearlo sin errores)\n✅ Si hay tecnologías específicas: \"requiere_aclaracion\" es false\n✅ Si NO hay tecnologías específicas: \"requiere_aclaracion\" es true con mensaje apropiado\n✅ \"tecnologia\" es un string separado por comas (formato: \"tech1, tech2, tech3\")\n✅ Las demás categorías son strings (pueden ser \"no especificado\")\n✅ \"correos_excluidos\" es un array de strings (puede estar vacío [])\n✅ Los correos en \"correos_excluidos\" tienen formato válido (contienen @)\n✅ NO hay nombres de tecnologías en perfil, educacion, certificaciones, experiencia\n✅ NO hay texto fuera del JSON\n✅ NO hay bloques de código markdown (```json)\n\nResponde ahora SOLO con el JSON.",
+              "type": "string"
+            },
+            {
+              "id": "b356ae94-c4ff-486e-9925-e42a7152bc12",
+              "name": "user_prompt",
+              "value": "=A continuación te proporciono una descripción o requisito para un puesto de desarrollador. Analízalo y clasifícalo según las categorías indicadas en el prompt del sistema.\n\nTexto a analizar:{{ $json.query }}\n",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -2128,
+        912
+      ],
+      "id": "548425f9-cdc7-4f03-8430-2a43274de1a7",
+      "name": "Prompt-llm1"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Ignorar el input real y retornar query hardcoded para pruebas\nconst queryHardcoded = \"Desarrolladores con experiencia en firma electrónica, Java Web, PostgreSQL, python, php, Git y manejo de Jira. Licencia en ciencias informáticas o ingeniería de software o carreras relacionadas, no incluyas a carolrosa95@hotmail.com\";\n\nreturn [{\n  json: {\n    query: queryHardcoded\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2352,
+        816
+      ],
+      "id": "70d76514-9ae8-4f44-beb8-f60b62bf1976",
+      "name": "Datos de prueba"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Configuración centralizada de grupos de tecnologías\nconst gruposTecnologias = [\n    // Java ecosystem\n    { agrupador: \"java\", variantes: [\"java\", \"java ee\", \"j2ee\", \"java enterprise\", \"j2se\", \"j2me\", \"jakarta ee\", \"javase\", \"jdk\", \"jre\"] },\n    { agrupador: \"spring\", variantes: [\"spring\", \"spring framework\", \"spring boot\", \"spring mvc\", \"spring cloud\", \"spring security\", \"spring data\"] },\n    { agrupador: \"hibernate\", variantes: [\"hibernate\", \"jpa\", \"java persistence api\", \"ejb\", \"cdi\", \"jsp\", \"servlet\"] },\n    \n    // JavaScript / TypeScript\n    { agrupador: \"javascript\", variantes: [\"javascript\", \"js\", \"ecmascript\", \"es6\", \"es2015\", \"es2020\", \"typescript\", \"ts\"] },\n    { agrupador: \"node\", variantes: [\"node\", \"node.js\", \"nodejs\"] },\n    { agrupador: \"react\", variantes: [\"react\", \"react.js\", \"reactjs\", \"next.js\", \"nextjs\", \"remix\"] },\n    { agrupador: \"angular\", variantes: [\"angular\", \"angular.js\", \"angularjs\", \"angular 2+\", \"angular cli\"] },\n    { agrupador: \"vue\", variantes: [\"vue\", \"vue.js\", \"vuejs\", \"nuxt\", \"nuxt.js\", \"nuxtjs\"] },\n    { agrupador: \"express\", variantes: [\"express\", \"express.js\", \"expressjs\"] },\n    { agrupador: \"svelte\", variantes: [\"svelte\", \"svelte.js\", \"sveltejs\", \"sapper\", \"sveltekit\"] },\n    { agrupador: \"jquery\", variantes: [\"jquery\", \"jquery ui\"] },\n    \n    // CSS / UI\n    { agrupador: \"css\", variantes: [\"css\", \"css3\", \"cascading style sheets\"] },\n    { agrupador: \"sass\", variantes: [\"sass\", \"scss\"] },\n    { agrupador: \"less\", variantes: [\"less\"] },\n    { agrupador: \"bootstrap\", variantes: [\"bootstrap\", \"bootstrap css\", \"bootstrap 5\", \"bootstrap 4\"] },\n    { agrupador: \"tailwind\", variantes: [\"tailwind\", \"tailwindcss\", \"tailwind css\"] },\n    { agrupador: \"material-ui\", variantes: [\"material-ui\", \"mui\", \"material design\"] },\n    { agrupador: \"html\", variantes: [\"html\", \"html5\"] },\n    \n    // Python\n    { agrupador: \"python\", variantes: [\"python\", \"python3\", \"py\", \"python2\"] },\n    { agrupador: \"django\", variantes: [\"django\", \"django rest framework\", \"drf\"] },\n    { agrupador: \"flask\", variantes: [\"flask\"] },\n    { agrupador: \"fastapi\", variantes: [\"fastapi\", \"fast api\"] },\n    { agrupador: \"pandas\", variantes: [\"pandas\"] },\n    { agrupador: \"numpy\", variantes: [\"numpy\"] },\n    { agrupador: \"scikit-learn\", variantes: [\"scikit-learn\", \"sklearn\", \"sci-kit learn\"] },\n    { agrupador: \"tensorflow\", variantes: [\"tensorflow\", \"tf\"] },\n    { agrupador: \"pytorch\", variantes: [\"pytorch\", \"torch\"] },\n    { agrupador: \"keras\", variantes: [\"keras\"] },\n    \n    // PHP\n    { agrupador: \"php\", variantes: [\"php\", \"php 7\", \"php 8\", \"php5\"] },\n    { agrupador: \"laravel\", variantes: [\"laravel\"] },\n    { agrupador: \"symfony\", variantes: [\"symfony\"] },\n    { agrupador: \"codeigniter\", variantes: [\"codeigniter\", \"ci\"] },\n    { agrupador: \"wordpress\", variantes: [\"wordpress\", \"wp\"] },\n    { agrupador: \"drupal\", variantes: [\"drupal\"] },\n    { agrupador: \"composer\", variantes: [\"composer\"] },\n    \n    // Ruby\n    { agrupador: \"ruby\", variantes: [\"ruby\"] },\n    { agrupador: \"rails\", variantes: [\"rails\", \"ruby on rails\", \"ror\"] },\n    \n    // .NET\n    { agrupador: \".net\", variantes: [\".net\", \"dotnet\", \".net core\", \"dotnet core\", \".net framework\", \".net 6\", \".net 7\", \".net 8\"] },\n    { agrupador: \"c#\", variantes: [\"c#\", \"csharp\", \"c sharp\"] },\n    { agrupador: \"asp.net\", variantes: [\"asp.net\", \"aspnet\", \"asp net\", \"blazor\"] },\n    { agrupador: \"entity framework\", variantes: [\"entity framework\", \"ef\", \"ef core\"] },\n    \n    // Go\n    { agrupador: \"go\", variantes: [\"go\", \"golang\"] },\n    { agrupador: \"gin\", variantes: [\"gin\", \"gin-gonic\"] },\n    \n    // Rust\n    { agrupador: \"rust\", variantes: [\"rust\"] },\n    \n    // C/C++\n    { agrupador: \"c\", variantes: [\"c\", \"c language\"] },\n    { agrupador: \"c++\", variantes: [\"c++\", \"cpp\", \"cplusplus\"] },\n    \n    // Databases - SQL\n    { agrupador: \"sql\", variantes: [\"sql\", \"structured query language\"] },\n    { agrupador: \"postgresql\", variantes: [\"postgresql\", \"postgres\", \"pgsql\"] },\n    { agrupador: \"mysql\", variantes: [\"mysql\", \"mariadb\"] },\n    { agrupador: \"sql server\", variantes: [\"sql server\", \"microsoft sql server\", \"mssql\", \"t-sql\"] },\n    { agrupador: \"oracle\", variantes: [\"oracle\", \"oracle db\", \"plsql\", \"pl/sql\"] },\n    { agrupador: \"sqlite\", variantes: [\"sqlite\", \"sqlite3\"] },\n    \n    // Databases - NoSQL\n    { agrupador: \"mongodb\", variantes: [\"mongodb\", \"mongo\"] },\n    { agrupador: \"redis\", variantes: [\"redis\"] },\n    { agrupador: \"cassandra\", variantes: [\"cassandra\"] },\n    { agrupador: \"dynamodb\", variantes: [\"dynamodb\"] },\n    { agrupador: \"elasticsearch\", variantes: [\"elasticsearch\", \"elastic search\", \"es\"] },\n    { agrupador: \"couchdb\", variantes: [\"couchdb\", \"couch db\"] },\n    \n    // Cloud Providers\n    { agrupador: \"aws\", variantes: [\"aws\", \"amazon web services\"] },\n    { agrupador: \"azure\", variantes: [\"azure\", \"microsoft azure\"] },\n    { agrupador: \"gcp\", variantes: [\"gcp\", \"google cloud\", \"google cloud platform\"] },\n    { agrupador: \"heroku\", variantes: [\"heroku\"] },\n    { agrupador: \"digitalocean\", variantes: [\"digitalocean\", \"digital ocean\"] },\n    \n    // DevOps / CI-CD\n    { agrupador: \"docker\", variantes: [\"docker\"] },\n    { agrupador: \"kubernetes\", variantes: [\"kubernetes\", \"k8s\"] },\n    { agrupador: \"jenkins\", variantes: [\"jenkins\"] },\n    { agrupador: \"gitlab\", variantes: [\"gitlab\", \"gitlab ci\", \"gitlab ci/cd\"] },\n    { agrupador: \"github actions\", variantes: [\"github actions\", \"gh actions\"] },\n    { agrupador: \"terraform\", variantes: [\"terraform\"] },\n    { agrupador: \"ansible\", variantes: [\"ansible\"] },\n    { agrupador: \"circleci\", variantes: [\"circleci\", \"circle ci\"] },\n    \n    // Version Control\n    { agrupador: \"git\", variantes: [\"git\"] },\n    { agrupador: \"github\", variantes: [\"github\"] },\n    { agrupador: \"bitbucket\", variantes: [\"bitbucket\"] },\n    { agrupador: \"svn\", variantes: [\"svn\", \"subversion\"] },\n    \n    // Project Management / Collaboration\n    { agrupador: \"jira\", variantes: [\"jira\"] },\n    { agrupador: \"confluence\", variantes: [\"confluence\"] },\n    { agrupador: \"trello\", variantes: [\"trello\"] },\n    { agrupador: \"asana\", variantes: [\"asana\"] },\n    { agrupador: \"slack\", variantes: [\"slack\"] },\n    \n    // Testing\n    { agrupador: \"junit\", variantes: [\"junit\"] },\n    { agrupador: \"pytest\", variantes: [\"pytest\"] },\n    { agrupador: \"jest\", variantes: [\"jest\"] },\n    { agrupador: \"mocha\", variantes: [\"mocha\"] },\n    { agrupador: \"selenium\", variantes: [\"selenium\"] },\n    { agrupador: \"cypress\", variantes: [\"cypress\"] },\n    { agrupador: \"postman\", variantes: [\"postman\"] },\n    \n    // Mobile Development\n    { agrupador: \"react native\", variantes: [\"react native\", \"react-native\", \"rn\"] },\n    { agrupador: \"flutter\", variantes: [\"flutter\"] },\n    { agrupador: \"swift\", variantes: [\"swift\"] },\n    { agrupador: \"kotlin\", variantes: [\"kotlin\"] },\n    { agrupador: \"android\", variantes: [\"android\", \"android studio\"] },\n    { agrupador: \"ios\", variantes: [\"ios\", \"xcode\"] },\n    \n    // OS / Scripting\n    { agrupador: \"linux\", variantes: [\"linux\", \"ubuntu\", \"centos\", \"debian\", \"red hat\"] },\n    { agrupador: \"bash\", variantes: [\"bash\", \"shell\", \"sh\"] },\n    { agrupador: \"powershell\", variantes: [\"powershell\", \"ps\"] },\n    { agrupador: \"windows\", variantes: [\"windows\", \"windows server\"] },\n    \n    // Web Servers\n    { agrupador: \"nginx\", variantes: [\"nginx\"] },\n    { agrupador: \"apache\", variantes: [\"apache\", \"apache http server\"] },\n    \n    // Message Queues\n    { agrupador: \"rabbitmq\", variantes: [\"rabbitmq\", \"rabbit mq\"] },\n    { agrupador: \"kafka\", variantes: [\"kafka\", \"apache kafka\"] },\n    \n    // GraphQL / APIs\n    { agrupador: \"graphql\", variantes: [\"graphql\"] },\n    { agrupador: \"rest\", variantes: [\"rest\", \"restful\", \"rest api\", \"restful api\"] },\n    { agrupador: \"soap\", variantes: [\"soap\"] },\n    { agrupador: \"grpc\", variantes: [\"grpc\"] },\n    \n    // Other Tools\n    { agrupador: \"excel\", variantes: [\"excel\", \"microsoft excel\", \"excel vba\"] },\n    { agrupador: \"power bi\", variantes: [\"power bi\", \"powerbi\"] },\n    { agrupador: \"tableau\", variantes: [\"tableau\"] },\n    { agrupador: \"swagger\", variantes: [\"swagger\", \"openapi\"] }\n];\n\nreturn [{\n    json: {\n        grupos_tecnologias: gruposTecnologias\n    }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1680,
+        816
+      ],
+      "id": "ef58899f-e495-4d11-900f-a4b4cfb12950",
+      "name": "Config - Grupos de Tecnologías"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Obtener grupos de tecnologías desde configuración\nconst gruposTecnologias = $('Config - Grupos de Tecnologías').first().json.grupos_tecnologias;\n\n// Obtener entrada desde n8n\nconst input = $input.first().json;\nconst techList = input.tecnologia || [];\n\nconsole.log('=== EXPANDIR TECNOLOGÍAS ===');\nconsole.log('Tecnologías originales:', techList);\n\n// Función para expandir una tecnología\nfunction expandSkill(skill, grupos) {\n    const skillLower = skill.toLowerCase();\n    \n    // Buscar en qué grupo está esta tecnología\n    for (const grupo of grupos) {\n        if (grupo.variantes.includes(skillLower)) {\n            return grupo.variantes;\n        }\n    }\n    \n    // Si no está en ningún grupo, retornar solo la tecnología\n    return [skillLower];\n}\n\n// Función para expandir lista de tecnologías\nfunction expandSkillList(list, grupos) {\n    const result = [];\n    const seen = new Set();\n    \n    for (const tech of list) {\n        const expanded = expandSkill(tech, grupos);\n        \n        // Agregar la tecnología original\n        if (!seen.has(tech.toLowerCase())) {\n            result.push(tech.toLowerCase());\n            seen.add(tech.toLowerCase());\n        }\n        \n        // Agregar todas las variantes expandidas\n        expanded.forEach(v => {\n            if (!seen.has(v)) {\n                result.push(v);\n                seen.add(v);\n            }\n        });\n    }\n    \n    return result;\n}\n\n// Procesar entrada\nconst expanded = expandSkillList(techList, gruposTecnologias);\n\nconsole.log('Tecnologías expandidas:', expanded);\nconsole.log('Total expandidas:', expanded.length);\n\n// Retornar resultado a n8n\nreturn [{\n    json: {\n        tecnologias_originales: techList,\n        tecnologias_expandida: expanded\n    }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1008,
+        704
+      ],
+      "id": "5a28b387-2bcc-492f-9ef4-b0f52d7c141a",
+      "name": "Expandir Tecnologias"
+    },
+    {
+      "parameters": {
+        "jsCode": "const error = $input.first().json.error || {};\n\nreturn [{\n  json: {\n    success: false,\n    error: error.message || \"No se pudo conectar con Qdrant\",\n    data: null,\n    instruccion: \"muestrale el mensaje de error y sugiere que se puede hacer\"\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -560,
+        720
+      ],
+      "id": "e4c9ab34-2044-46d7-a80c-56ae7044da1f",
+      "name": "Error: Qdrant Search - tecnologia"
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\n\n// Obtener grupos de tecnologías desde configuración\nconst gruposTecnologias = $('Config - Grupos de Tecnologías').first().json.grupos_tecnologias;\n\n// Obtener las tecnologías originales y expandidas desde \"Preparar Búsquedas Individuales\"\nconst prepararBusquedas = $('Expandir Tecnologias').first().json;\nconst tecnologiasOriginales = prepararBusquedas.tecnologias_originales || [];\nconst tecnologiasExpandida = prepararBusquedas.tecnologias_expandida || [];\n\nconsole.log('=== INICIO FORMATEAR RESPUESTA ===');\nconsole.log('Tecnologías originales:', tecnologiasOriginales);\nconsole.log('Tecnologías expandidas:', tecnologiasExpandida);\nconsole.log('Total items recibidos:', items.length);\n\n// Función para obtener el agrupador de una tecnología\nfunction obtenerAgrupador(tecnologia, grupos) {\n    const techLower = tecnologia.toLowerCase();\n    \n    for (const grupo of grupos) {\n        if (grupo.variantes.includes(techLower)) {\n            return grupo.agrupador;\n        }\n    }\n    \n    // Si no está en ningún grupo, la tecnología es su propio agrupador\n    return techLower;\n}\n\n// Crear mapeo: tecnología original -> sus variantes expandidas\nconst mapeoTecnologias = {};\n\nfor (const techOriginal of tecnologiasOriginales) {\n    const agrupador = obtenerAgrupador(techOriginal, gruposTecnologias);\n    mapeoTecnologias[techOriginal] = {\n        agrupador: agrupador,\n        variantes: []\n    };\n}\n\n// Llenar las variantes para cada tecnología original\nfor (const techExpandida of tecnologiasExpandida) {\n    const agrupador = obtenerAgrupador(techExpandida, gruposTecnologias);\n    \n    // Buscar a qué tecnología original pertenece este agrupador\n    for (const techOriginal of tecnologiasOriginales) {\n        if (mapeoTecnologias[techOriginal].agrupador === agrupador) {\n            mapeoTecnologias[techOriginal].variantes.push(techExpandida.toLowerCase());\n        }\n    }\n}\n\nconsole.log('Mapeo de tecnologías:', JSON.stringify(mapeoTecnologias, null, 2));\n\n// Extraer candidatos únicos de todos los items\nconst candidatosMap = {};\n\nfor (const item of items) {\n    const puntos = item.json.result?.points || [];\n    \n    console.log(`Procesando item con ${puntos.length} puntos`);\n    \n    for (const punto of puntos) {\n        if (punto.payload) {\n            const correo = punto.payload.persona_correo;\n            \n            if (!candidatosMap[correo]) {\n                candidatosMap[correo] = {\n                    persona_nombre_apellido: punto.payload.persona_nombre_apellido,\n                    persona_correo: correo,\n                    perfil: punto.payload.text,\n                    trabajo_cargo_postulante: punto.payload.trabajo_cargo_postulante,\n                    trabajo_modalidad: punto.payload.trabajo_modalidad,\n                    trabajo_espectativa_salarial: punto.payload.trabajo_espectativa_salarial,\n                    habilidades_tecnologia: (punto.payload.habilidades_tecnologia || []).map(h => h.toLowerCase())\n                };\n            }\n        }\n    }\n}\n\nconsole.log('Total candidatos únicos encontrados:', Object.keys(candidatosMap).length);\n\n// Para cada candidato, determinar qué tecnologías originales cumple\nconst candidatosFinal = [];\n\nfor (const correo in candidatosMap) {\n    const candidato = candidatosMap[correo];\n    \n    console.log(`\\n=== Evaluando: ${candidato.persona_nombre_apellido} ===`);\n    console.log('Habilidades del candidato:', candidato.habilidades_tecnologia);\n    \n    const tecnologiasEncontradas = [];\n    \n    // Verificar cada tecnología original\n    for (const techOriginal of tecnologiasOriginales) {\n        const variantes = mapeoTecnologias[techOriginal].variantes;\n        \n        console.log(`Buscando ${techOriginal}, variantes:`, variantes);\n        \n        // Verificar si el candidato tiene alguna de las variantes\n        const tieneMatch = candidato.habilidades_tecnologia.some(habilidad =>\n            variantes.includes(habilidad)\n        );\n        \n        if (tieneMatch) {\n            tecnologiasEncontradas.push(techOriginal);\n            console.log(`✓ Encontrado: ${techOriginal}`);\n        } else {\n            console.log(`✗ No encontrado: ${techOriginal}`);\n        }\n    }\n    \n    // Solo incluir candidatos con al menos una coincidencia\n    if (tecnologiasEncontradas.length > 0) {\n        const tecnologiasNoEncontradas = tecnologiasOriginales\n            .filter(t => !tecnologiasEncontradas.includes(t));\n        \n        candidatosFinal.push({\n            persona_nombre_apellido: candidato.persona_nombre_apellido,\n            persona_correo: candidato.persona_correo,\n            perfil: candidato.perfil,\n            trabajo_cargo_postulante: candidato.trabajo_cargo_postulante,\n            trabajo_modalidad: candidato.trabajo_modalidad,\n            trabajo_espectativa_salarial: candidato.trabajo_espectativa_salarial,\n            tecnologias_encontradas: tecnologiasEncontradas.sort(),\n            tecnologias_no_encontradas: tecnologiasNoEncontradas.sort(),\n            total_tecnologias_match: tecnologiasEncontradas.length,\n            total_tecnologias_faltantes: tecnologiasNoEncontradas.length,\n            porcentaje_coincidencia: Math.round((tecnologiasEncontradas.length / tecnologiasOriginales.length) * 100)\n        });\n    }\n}\n\n// Ordenar por mayor coincidencia\ncandidatosFinal.sort((a, b) => b.total_tecnologias_match - a.total_tecnologias_match);\n\nconsole.log('\\n=== RESULTADO FINAL ===');\nconsole.log('Candidatos con match:', candidatosFinal.length);\n\n// Tecnologías no encontradas globalmente\nconst techsEncontradasGlobal = new Set();\ncandidatosFinal.forEach(c => c.tecnologias_encontradas.forEach(t => techsEncontradasGlobal.add(t)));\nconst techsNoEncontradasGlobal = tecnologiasOriginales.filter(t => !techsEncontradasGlobal.has(t));\n\n// Observación\nlet observacion = `Se encontraron ${candidatosFinal.length} candidatos. `;\nobservacion += `Tecnologías buscadas: ${tecnologiasOriginales.join(', ')}. `;\n\nif (techsNoEncontradasGlobal.length > 0) {\n    observacion += `Tecnologías sin candidatos: ${techsNoEncontradasGlobal.join(', ')}.`;\n} else {\n    observacion += 'Todas las tecnologías tienen al menos un candidato.';\n}\n\nreturn [{\n    json: {\n        success: true,\n        candidatos_encontrados: candidatosFinal.length,\n        tecnologias_buscadas: tecnologiasOriginales,\n        tecnologias_no_encontradas: techsNoEncontradasGlobal,\n        candidatos: candidatosFinal,\n        observacion: observacion\n    }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -560,
+        528
+      ],
+      "id": "1808bbcb-e7f9-4939-a37d-f039f82368ed",
+      "name": "Formatear Candidatos Encontrados"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://qdrant:6333/collections/curriculums_rag/points/scroll",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"filter\": {\n    \"must\": [\n      {\n        \"key\": \"seccion\",\n        \"match\": { \"value\": \"perfil\" }\n      },\n      {\n        \"key\": \"grupo_nombre\",\n        \"match\": { \"value\": \"cv_desarrrollo\" }\n      },\n      {\n        \"key\": \"habilidades_tecnologia\",\n        \"match\": {\n          \"any\": {{ JSON.stringify($json.tecnologias_expandida) }}\n        }\n      }\n    ],\n    \"must_not\": [\n      {\n        \"key\": \"persona_correo\",\n        \"match\": {\n          \"any\": {{ JSON.stringify($('Cloudflare: LLM Llama 3.').item.json.result.response.correos_excluidos) }}\n        }\n      }\n    ]\n  },\n  \"limit\": 50,\n  \"with_payload\": true,\n  \"with_vector\": false\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -784,
+        704
+      ],
+      "id": "cbecfb54-53a1-4324-b00b-66ef9551bbec",
+      "name": "HTTP: Qdrant Search - tecnologia",
+      "retryOnFail": true,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first().json\n\n// Respuesta final\nconst respuestaFinal = {\n  success: true,\n  error: null,\n  data: {\n    candidatos_encontrados: item.candidatos_encontrados,\n    tecnologias_buscadas: item.tecnologias_buscadas,\n    observacion: `Se encontraron ${item.candidatos_encontrados} candidatos (5 o menos). Filtro por tecnologías aplicado sin scoring semántico.`,\n    candidatos: item.candidatos,\n    correos_excluidos: $('Cloudflare: LLM Llama 3.').first().json.result.response.correos_excluidos\n  },\n  instruccion: \"Dile al usuario que al encontrarse menos de 6 candidatos, solo se evaluó las tecnologías y no se evaluó los otros aspectos de solicitatos en la consulta original. Como formato de salida dar un breve analisis en formato markdown con los datos proporcionados en el campo data de la respuesta.\"  \n};\n\nreturn [{ json: respuestaFinal }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -112,
+        624
+      ],
+      "id": "688fc12e-96af-4660-bcc2-3b67316958de",
+      "name": "Formatear Respuesta con Perfiles"
+    },
+    {
+      "parameters": {
+        "jsCode": "const error = $('Preparar Entrada Tecnologia').first().json.error || \"Ocurrió un error al preprar la entrade de tecnología\";\n\nreturn [{\n  json: {\n    success: false,\n    error: error,\n    data: null,\n    instruccion: \"Analiza el error, muestrale el mensaje de error y sugiere que se puede hacer\"\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1008,
+        896
+      ],
+      "id": "627deadb-ae7b-4ca8-9ab5-80787f9f100f",
+      "name": "Error: Entrada Tecnologia"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "7ffe9239-f5e5-4472-baba-416490a5c822",
+              "leftValue": "={{ $json.success }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -1232,
+        816
+      ],
+      "id": "87e59857-8c57-4eb0-b96d-54be2c370366",
+      "name": "If: Entrada Tecnologia"
+    },
+    {
+      "parameters": {
+        "content": "# filtrado semántico por secciones\n### - skills\n### - educacion\n### - certificaciones\n### - experiencia",
+        "height": 768,
+        "width": 1568,
+        "color": 3
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        48,
+        16
+      ],
+      "id": "344f0335-4e28-4956-89fa-a802bcf5beb7",
+      "name": "Sticky Note1"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// El texto viene directo en query\nconst llm = $('Cloudflare: LLM Llama 3.').item.json.result.response\nconst tecnologiasTexto = llm.tecnologia\nconst requiere_aclaracion = llm.requiere_aclaracion\n\nconsole.log(\"=== INPUT RECIBIDO ===\");\nconsole.log(\"Texto recibido:\", tecnologiasTexto);\n\n// Validar\nif(requiere_aclaracion === true){\n  return {\n    json: {\n      success: false,\n      error: llm?.mensaje || 'La consulta del usuario está incompleta, require aclaración, evalua y sugierele que hacer',\n    }\n  };\n}\n\nif (!tecnologiasTexto || typeof tecnologiasTexto !== 'string' || tecnologiasTexto.trim() === '') {\n  return {\n    json: {\n      success: false,\n      error: 'Se requiere un texto con tecnologías separadas por comas',\n    }\n  };\n}\n\n// Convertir a array\nconst tecnologias = tecnologiasTexto\n  .split(',')\n  .map(t => t.trim().toLowerCase())\n  .filter(t => t.length > 0);\n\nif (tecnologias.length === 0) {\n  throw new Error('No se encontraron tecnologías válidas');\n}\n\nconsole.log(\"=== TECNOLOGÍAS PROCESADAS ===\");\nconsole.log(\"Cantidad:\", tecnologias.length);\nconsole.log(\"Array:\", tecnologias);\n\nreturn {\n  json: {\n    success: true,\n    error: null,\n    grupo_nombre: \"cv_desarrollo\",\n    tecnologia: tecnologias\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1456,
+        816
+      ],
+      "id": "0f0f6f08-c85c-41a1-b4f9-4df5ef813036",
+      "name": "Preparar Entrada Tecnologia"
+    },
+    {
+      "parameters": {
+        "content": "# filtrado por tecnología",
+        "height": 768,
+        "width": 1744,
+        "color": 4
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -1728,
+        400
+      ],
+      "id": "654fba3a-7d35-4e34-93a0-b799a9f00328",
+      "name": "Sticky Note"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "Prompt-llm1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "Datos de prueba",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar Categorías para Loop": {
+      "main": [
+        [
+          {
+            "node": "Loop por Categoría",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop por Categoría": {
+      "main": [
+        [
+          {
+            "node": "Consolidar Todos los Resultados",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "cloudflare-embedding-generar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "cloudflare-embedding-generar": {
+      "main": [
+        [
+          {
+            "node": "HTTP: Qdrant Search - perfil",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "cloudflare-error-formateo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "cloudflare-error-formateo": {
+      "main": [
+        []
+      ]
+    },
+    "Error: LLM": {
+      "main": [
+        []
+      ]
+    },
+    "HTTP: Qdrant Search - perfil": {
+      "main": [
+        [
+          {
+            "node": "Extraer Resultados de Qdrant",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error: Qdrant Search - perfil",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Es Experiencia?": {
+      "main": [
+        [
+          {
+            "node": "Agrupar Experiencia - MAX Score",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Pass Through - Otras Categorías",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extraer Resultados de Qdrant": {
+      "main": [
+        [
+          {
+            "node": "¿Es Experiencia?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Agrupar Experiencia - MAX Score": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pass Through - Otras Categorías": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Loop por Categoría",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Consolidar Todos los Resultados": {
+      "main": [
+        [
+          {
+            "node": "Calcular Score Final",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calcular Score Final": {
+      "main": [
+        [
+          {
+            "node": "Top 5 Candidatos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Existe mas de 5 candidatos?": {
+      "main": [
+        [
+          {
+            "node": "Preparar Categorías para Loop",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Formatear Respuesta con Perfiles",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prompt-llm1": {
+      "main": [
+        [
+          {
+            "node": "Cloudflare: LLM Llama 3.",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Datos de prueba": {
+      "main": [
+        [
+          {
+            "node": "Prompt-llm1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cloudflare: LLM Llama 3.": {
+      "main": [
+        [
+          {
+            "node": "Config - Grupos de Tecnologías",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error: LLM",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Config - Grupos de Tecnologías": {
+      "main": [
+        [
+          {
+            "node": "Preparar Entrada Tecnologia",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Expandir Tecnologias": {
+      "main": [
+        [
+          {
+            "node": "HTTP: Qdrant Search - tecnologia",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Formatear Candidatos Encontrados": {
+      "main": [
+        [
+          {
+            "node": "¿Existe mas de 5 candidatos?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP: Qdrant Search - tecnologia": {
+      "main": [
+        [
+          {
+            "node": "Formatear Candidatos Encontrados",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error: Qdrant Search - tecnologia",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If: Entrada Tecnologia": {
+      "main": [
+        [
+          {
+            "node": "Expandir Tecnologias",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error: Entrada Tecnologia",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar Entrada Tecnologia": {
+      "main": [
+        [
+          {
+            "node": "If: Entrada Tecnologia",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "f8a76f2a-9770-42de-9146-3644329e6fc9",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "ea3a2191dd083f3463309ce1fd71d6ac10d38749f12af05ebf88e034ea7d7231"
+  },
+  "id": "ApKIM2ZvdhKGENVY",
+  "tags": []
+}

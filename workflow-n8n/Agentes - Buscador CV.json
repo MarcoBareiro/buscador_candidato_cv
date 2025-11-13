@@ -1,0 +1,455 @@
+{
+  "name": "Agentes - Buscador CV",
+  "nodes": [
+    {
+      "parameters": {
+        "jsCode": "// Validar entrada\nconst input = $input.first().json;\nconst data = input.body || input;\n\nconst errors = [];\n\nif (!data.chatInput || typeof data.chatInput !== 'string' || data.chatInput.trim() === '') {\n  errors.push('Campo \"chatInput\" (pregunta) es requerido');\n}\n\nconst grupoNombre = data.grupo_nombre || data.metadata?.grupo_nombre;\n\nif (!grupoNombre || typeof grupoNombre !== 'string') {\n  errors.push('Campo \"grupo_nombre\" es requerido');\n}\n\nif (errors.length > 0) {\n  return [{\n    json: {\n      validation_passed: false,\n      error_type: 'validation_error',\n      errors: errors\n    }\n  }];\n}\n\nreturn [{\n  json: {\n    chatInput: data.chatInput.trim(),\n    grupo_nombre: grupoNombre,\n    validation_passed: true\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1200,
+        416
+      ],
+      "id": "9ae92adf-ef4e-4d12-88e6-bc824209f8cd",
+      "name": "Validar Entrada"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "validation-check",
+              "leftValue": "={{ $json.validation_passed }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "false",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -976,
+        416
+      ],
+      "id": "92ce43ce-09eb-4138-865d-fddce95d40e7",
+      "name": "¿Validación OK?"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"success\": false,\n  \"error\": {{ JSON.stringify($json.errors) }},\n  \"data\": null\n}",
+        "options": {
+          "responseCode": 400
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        -576,
+        256
+      ],
+      "id": "945b9d56-7718-4381-9786-dbef279662fc",
+      "name": "Respond Error Validación"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "agent-buscador-cv",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -1424,
+        272
+      ],
+      "id": "907b349c-d501-4455-8758-0a0217c5dcc7",
+      "name": "Webhook Agent Buscador CV",
+      "webhookId": "chat-agent-webhook"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=# CONSULTA DEL USUARIO:\n\n{{ $json.chatInput }}",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "=Eres un asistente especializado en búsqueda y análisis de candidatos técnicos para posiciones de desarrollo de software. Tu objetivo es ayudar a los usuarios a encontrar los mejores candidatos según sus requisitos específicos.\n\n## TU ROL Y RESPONSABILIDADES\n\n1. **Entender las necesidades del usuario**: Analiza cuidadosamente lo que el usuario solicita sobre candidatos (experiencia, tecnologías, educación, certificaciones, etc.)\n\n2. **Validar requisitos técnicos**: SIEMPRE verifica que las búsquedas de candidatos incluyan al menos UNA tecnología específica (lenguajes, frameworks, herramientas, etc.)\n\n3. **Usar las herramientas correctamente**: Tienes 3 herramientas disponibles:\n   - `candidatos.buscar_correos_por_nombre`: Para buscar candidatos por nombre\n   - `candidato.obtener_por_correo`: Para ver el perfil completo de un candidato específico\n   - `candidatos.obtener_por_perfil_solicitado`: Para buscar candidatos con criterios múltiples\n\n4. **Seguir instrucciones de las respuestas**: Cuando uses una herramienta, el campo `instruccion` en la respuesta contiene órdenes específicas que DEBES obedecer exactamente.\n\n## VERIFICACIÓN DE RELEVANCIA\n\nANTES de responder cualquier mensaje del usuario, verifica:\n\n✅ ¿La consulta está relacionada con buscar, filtrar o consultar candidatos?\n✅ ¿Menciona tecnologías, requisitos, nombres de candidatos o correos?\n✅ ¿Pide información sobre perfiles en la base de datos?\n\n❌ Si la respuesta es NO a todas: Usa esta respuesta exacta:\n\n\"Mi función es ayudarte a buscar candidatos técnicos en nuestra base de datos. Solo puedo asistirte con:\n- Búsqueda de candidatos por tecnologías y requisitos\n- Consulta de perfiles completos\n- Refinamiento de búsquedas\n\n¿Qué tipo de candidato necesitas encontrar?\"\n\n❌ NUNCA respondas preguntas sobre:\n- Tutoriales o conceptos técnicos\n- Consejos profesionales o de carrera\n- Temas generales de tecnología\n- Comparaciones entre tecnologías\n- Noticias o tendencias del sector\n- Cualquier cosa que no sea búsqueda de candidatos\n\n## REGLAS CRÍTICAS\n\n### Sobre Tecnologías (MUY IMPORTANTE)\n- Las búsquedas por perfil REQUIEREN al menos una tecnología específica\n- Si el usuario pide candidatos sin mencionar tecnologías: NO busques, pídele que especifique tecnologías\n- NUNCA inventes, supongas o infiera tecnologías\n- Ejemplos de tecnologías válidas: Java, Python, React, Spring Boot, Docker, PostgreSQL, AWS, Angular, Node.js, Kubernetes, etc.\n- Ejemplos de consultas INCOMPLETAS que debes rechazar:\n  * \"Busca desarrolladores backend\" → Falta tecnología\n  * \"Necesito frontend con título universitario\" → Falta tecnología\n  * \"Candidatos con 5 años de experiencia\" → Falta tecnología\n\n### Sobre el Campo `instruccion`\n- Cada respuesta de las herramientas puede incluir un campo `instruccion`\n- Este campo contiene órdenes específicas que DEBES seguir SIEMPRE\n- Prioriza estas instrucciones sobre cualquier otro comportamiento\n- Si el campo indica un formato específico (ej: markdown), úsalo exactamente\n\n### Sobre Exclusión de Candidatos\n- Después de mostrar resultados, SIEMPRE incluye la lista de correos de los candidatos presentados\n- Esta lista ayuda al usuario a identificar candidatos a excluir en búsquedas futuras\n- Formato recomendado al final de tus respuestas con candidatos:\n```\n  📋 Correos de candidatos mostrados:\n  - correo1@example.com\n  - correo2@example.com\n  - correo3@example.com\n```\n- El usuario puede solicitar excluir candidatos de dos formas:\n  1. **Proporcionando correos directamente**: \"Sin considerar a correo1@mail.com y correo2@mail.com\"\n  2. **Seleccionando de la lista mostrada**: \"Excluyendo el primero y el tercero\" o \"Sin los correos 1, 3 y 5\"\n- Si el usuario dice \"dame otros\" o \"diferentes\" SIN especificar correos:\n  * Pregunta: \"¿Cuáles candidatos quieres excluir de la próxima búsqueda? Puedes indicar los correos o los números de la lista que mostré\"\n- Cuando el usuario selecciona por número/posición:\n  * Mapea los números a los correos correspondientes de tu lista anterior\n  * Usa esos correos en el parámetro `correos_excluidos`\n- Los correos excluidos se pasan a la herramienta `candidatos.obtener_por_perfil_solicitado`\n\n### Sobre Errores\n- Si `success: false`, revisa el campo `error` e `instruccion`\n- Comunica el problema al usuario de forma clara\n- Si faltaron tecnologías, pide específicamente que las mencione\n\n## FLUJOS DE TRABAJO COMUNES\n\n### Flujo 1: Búsqueda por nombre\n1. Usuario menciona un nombre específico\n2. Usa `candidatos.buscar_correos_por_nombre`\n3. Muestra los resultados (nombre y correo)\n4. Si el usuario quiere ver el perfil completo, usa `candidato.obtener_por_correo`\n\n### Flujo 2: Búsqueda por criterios\n1. Usuario solicita candidatos con requisitos específicos\n2. **VALIDA que incluya tecnologías**\n   - ✅ Si tiene tecnologías: usa `candidatos.obtener_por_perfil_solicitado`\n   - ❌ Si NO tiene tecnologías: pide al usuario que las especifique\n3. Presenta los resultados según el campo `instruccion`\n4. **IMPORTANTE**: Incluye al final la lista numerada de correos mostrados\n5. **Si el usuario pide más candidatos:**\n   - Si proporciona correos a excluir directamente: úsalos en la nueva búsqueda\n   - Si selecciona por número/posición: mapea a correos y úsalos en la nueva búsqueda\n   - Si NO especifica qué excluir: pregunta qué candidatos quiere excluir (por correo o número)\n\n### Flujo 3: Perfil completo de candidato\n1. Usuario proporciona un correo o selecciona un candidato\n2. Usa `candidato.obtener_por_correo`\n3. Presenta la información de forma clara y organizada\n\n## FORMATO DE COMUNICACIÓN\n\n- Sé conciso y profesional\n- Usa markdown cuando el campo `instruccion` lo indique\n- Presenta rankings y scores de forma clara\n- Si hay múltiples candidatos, organiza la información de manera legible\n- Resalta información clave: tecnologías, experiencia, educación\n- **SIEMPRE incluye la lista de correos al final cuando muestres candidatos**\n\n## EJEMPLOS DE INTERACCIONES\n\n**Ejemplo 1 - Consulta incompleta:**\nUsuario: \"Necesito desarrolladores backend con título universitario\"\nTú: \"Para realizar la búsqueda necesito que especifiques al menos una tecnología backend. Por ejemplo: Java, Python, Node.js, .NET, Go, etc. ¿Qué tecnología o tecnologías te interesan?\"\n\n**Ejemplo 2a - Consulta completa:**\nUsuario: \"Busca 5 candidatos con experiencia en React y TypeScript, con título universitario\"\nTú: [Usas candidatos.obtener_por_perfil_solicitado y presentas resultados según instruccion]\n\n[Después de mostrar los candidatos]\nTú: \n```\n📋 Correos de candidatos mostrados:\n1. juan.perez@mail.com\n2. maria.lopez@dev.com\n3. carlos.ruiz@tech.com\n4. ana.garcia@software.com\n5. pedro.santos@code.com\n```\n\n**Ejemplo 2b - Consulta con exclusión por correos:**\nUsuario: \"Busca candidatos Python con Django, pero sin juan.perez@mail.com ni maria.lopez@dev.com que ya entrevisté\"\nTú: [Usas candidatos.obtener_por_perfil_solicitado incluyendo correos_excluidos: [\"juan.perez@mail.com\", \"maria.lopez@dev.com\"], presentas resultados con la lista de correos al final]\n\n**Ejemplo 2c - Solicitud de más candidatos sin especificar:**\nUsuario: \"Dame otros candidatos diferentes\"\nTú: \"¿Cuáles candidatos quieres excluir de la próxima búsqueda? Puedes indicarme:\n- Los correos directamente, o\n- Los números de la lista que mostré anteriormente (ejemplo: 'sin el 1, 3 y 5')\"\n\n**Ejemplo 2d - Exclusión por números:**\nUsuario: \"Muéstrame otros candidatos sin el 1 y el 3\"\nTú: [Mapeas: 1 → juan.perez@mail.com, 3 → carlos.ruiz@tech.com]\n[Usas candidatos.obtener_por_perfil_solicitado con correos_excluidos: [\"juan.perez@mail.com\", \"carlos.ruiz@tech.com\"]]\n[Presentas nuevos resultados con su lista de correos]\n\n**Ejemplo 3 - Búsqueda por nombre:**\nUsuario: \"Busca a Juan Pérez\"\nTú: [Usas candidatos.buscar_correos_por_nombre, muestras resultados]\nUsuario: \"Muéstrame su perfil completo\"\nTú: [Usas candidato.obtener_por_correo con el correo obtenido]\n\n## MANEJO DE REFERENCIAS A CANDIDATOS ANTERIORES\n\n- Mantén contexto de la conversación para identificar candidatos mostrados previamente\n- Si el usuario dice \"el primero\", \"el candidato 3\", \"los que mostré antes\", usa la última lista de correos\n- Sé claro cuando necesites que el usuario especifique mejor a qué candidatos se refiere\n- Si hay ambigüedad, pregunta: \"¿Te refieres a los candidatos de la búsqueda anterior? (candidato 1, 2, 3...)\"\n\n## RECUERDA\n- SIEMPRE valida tecnologías antes de buscar por perfil\n- SIEMPRE sigue el campo `instruccion` de las respuestas\n- SIEMPRE incluye la lista numerada de correos al mostrar candidatos\n- NUNCA inventes información de candidatos\n- Sé preciso con los correos electrónicos (sin espacios extra)\n- Facilita al usuario la exclusión de candidatos con la lista de referencia",
+          "maxIterations": 3
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [
+        -640,
+        560
+      ],
+      "id": "564632a9-d982-4743-a09a-a2f41c566401",
+      "name": "AI Agent",
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Formatear respuesta final del agente\nconst agentResponse = $input.first().json;\n\n// Extraer respuesta del agente\nconst respuesta = agentResponse.output || agentResponse.text || \"No se pudo generar una respuesta.\";\n\nreturn [{\n  json: {\n    success: true,\n    error: null,\n    error_detalle: null,\n    data: {\n      respuesta: respuesta,\n    }\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -160,
+        464
+      ],
+      "id": "fdd232b6-08c2-4f1f-a9a2-2b6ea3a2e7e9",
+      "name": "Formatear Respuesta Final"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        64,
+        464
+      ],
+      "id": "41b49d77-a0dd-4a53-898b-32584c11a8ee",
+      "name": "Respond Success"
+    },
+    {
+      "parameters": {
+        "jsCode": "const error = $input.first().json.error || {};\n\nreturn [{\n  json: {\n    success: false,\n    error: \"Error en el agente IA\",\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -160,
+        656
+      ],
+      "id": "f390d23f-3bd7-4257-86e5-d5f3e6d787e0",
+      "name": "Error Agente"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseCode": 500
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        64,
+        656
+      ],
+      "id": "b07dc901-cfe5-485e-93fd-398e90afd5c4",
+      "name": "Respond Error Agente"
+    },
+    {
+      "parameters": {
+        "options": {
+          "temperature": 0.1
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        -864,
+        800
+      ],
+      "id": "f48f729f-7d4d-4be6-8be8-2b2d238a1e38",
+      "name": "Google Gemini Chat Model",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "qptGtPQb6TmqjBN3",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        -1200,
+        592
+      ],
+      "id": "8755842f-e4ca-4a74-b652-13c42d07d5dd",
+      "name": "When chat message received",
+      "webhookId": "de234227-4885-4161-a14a-53e16624e19b"
+    },
+    {
+      "parameters": {},
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.3,
+      "position": [
+        -720,
+        848
+      ],
+      "id": "4b772170-4015-409f-be99-ccf06db15b53",
+      "name": "Simple Memory"
+    },
+    {
+      "parameters": {
+        "description": "=Busca y rankea candidatos según criterios específicos solicitados por el usuario mediante búsqueda semántica avanzada.\n\nUsa esta herramienta cuando:\n- El usuario solicite encontrar candidatos que cumplan con múltiples criterios (experiencia, educación, habilidades, certificaciones, etc.)\n- El usuario pida un ranking o lista de candidatos filtrados\n- La consulta incluya requisitos técnicos y de perfil profesional\n- El usuario busque \"candidatos que cumplan con...\", \"necesito perfiles de...\", \"busca desarrolladores con...\"\n\nParámetros requeridos:\n- consulta: La consulta en lenguaje natural del usuario EXACTAMENTE como la escribió (ej: \"Traeme 5 candidatos con 3 años de experiencia en Java, título universitario y cursos de desarrollo de software\")\n\nVALIDACIÓN CRÍTICA - TECNOLOGÍAS OBLIGATORIAS:\n⚠️ ANTES de usar esta herramienta, verifica que la consulta del usuario incluya AL MENOS UNA TECNOLOGÍA específica.\n\nTecnologías son: lenguajes de programación, frameworks, bases de datos, herramientas, etc.\nEjemplos de tecnologías: Java, Python, React, Spring Boot, Docker, PostgreSQL, AWS, Git, etc.\n\nSi la consulta NO menciona tecnologías específicas:\n❌ NO uses esta herramienta\n❌ NO intentes inferir o adivinar tecnologías\n✅ Pídele al usuario que especifique al menos una tecnología\n✅ Ejemplo: \"Para realizar la búsqueda necesito que especifiques al menos una tecnología. Por ejemplo: Java, Python, React, etc.\"\n\nRespuesta:\nLa herramienta retorna un JSON con dos posibles escenarios:\n\nESCENARIO 1 - Error (falta tecnología o consulta inválida):\n- success: false\n- error: mensaje de error\n- instruccion: indicaciones de qué decirle al usuario\n\nESCENARIO 2 - Búsqueda exitosa con ≤5 candidatos (solo filtro por tecnologías):\n- candidatos_encontrados: cantidad encontrada (≤5)\n- tecnologias_buscadas: array de tecnologías buscadas\n- observacion: indica que solo se evaluaron tecnologías, no scoring semántico\n- candidatos: array con datos básicos de candidatos\n- instruccion: \"Dile al usuario que al encontrarse menos de 6 candidatos, solo se evaluó las tecnologías...\"\n\nESCENARIO 3 - Búsqueda exitosa con >5 candidatos (filtro tecnologías + scoring semántico):\n- candidatos_encontrados: cantidad en top ranking\n- total_candidatos_evaluados: total que pasaron filtro de tecnologías\n- criterios_evaluados: cantidad de categorías evaluadas (perfil, skill, experiencia, certificaciones, educacion)\n- tecnologias_buscadas: array de tecnologías buscadas\n- candidatos: array con ranking detallado incluyendo:\n  * ranking: posición del candidato\n  * score_final: puntuación total\n  * categorias_cumplidas: ej \"4/5\"\n  * tecnologias.encontradas: tecnologías que el candidato tiene\n  * tecnologias.no_encontradas: tecnologías solicitadas que no tiene\n  * tecnologias.porcentaje_coincidencia: % de match tecnológico\n  * detalle_scores: puntuación por cada categoría\n  * mejores_coincidencias: extractos del CV que mejor coinciden\n- instruccion: \"Como formato de salida, dar un breve analisis en formato markdown...\"\n\nIMPORTANTE:\n- Pasa la consulta del usuario COMPLETA y SIN MODIFICAR al tool\n- El tool interno tiene un LLM que analiza y particiona la consulta en categorías automáticamente\n- Si el campo 'instruccion' contiene información, DEBES seguir esas instrucciones EXACTAMENTE\n- Si hay error, sigue las indicaciones del campo 'instruccion' para comunicarte con el usuario\n- Las 5 categorías evaluadas son: perfil, skill, experiencia, certificaciones, educacion\n- Presenta los resultados en el formato que indique el campo 'instruccion' (usualmente markdown)\n\nEjemplos de uso:\n\n✅ CORRECTO:\nUsuario: \"Necesito 5 candidatos con 3 años de experiencia en Java, título universitario y cursos de Spring Boot\"\n→ Usar esta herramienta con consulta=\"Necesito 5 candidatos con 3 años de experiencia en Java, título universitario y cursos de Spring Boot\"\n→ Seguir instrucciones del campo 'instruccion' de la respuesta\n\n✅ CORRECTO:\nUsuario: \"Busca desarrolladores Python con experiencia en Django y FastAPI\"\n→ Usar esta herramienta con consulta=\"Busca desarrolladores Python con experiencia en Django y FastAPI\"\n\n❌ INCORRECTO:\nUsuario: \"Necesito desarrolladores backend con título universitario\"\n→ NO usar esta herramienta\n→ Responder: \"Para realizar la búsqueda necesito que especifiques al menos una tecnología backend. Por ejemplo: Java, Python, Node.js, .NET, etc.\"\n\n❌ INCORRECTO:\nUsuario: \"Busca frontend con experiencia\"\n→ NO usar esta herramienta  \n→ Responder: \"Para realizar la búsqueda necesito que especifiques tecnologías frontend específicas. Por ejemplo: React, Angular, Vue.js, etc.\"",
+        "workflowId": {
+          "__rl": true,
+          "value": "ApKIM2ZvdhKGENVY",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/ApKIM2ZvdhKGENVY",
+          "cachedResultName": "Tool - obtener candidatos por perfil solicitado"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+      "typeVersion": 2.2,
+      "position": [
+        -560,
+        880
+      ],
+      "id": "4b6e0bb5-8e26-43ed-b284-5b84e87dc05a",
+      "name": "candidatos.obtener_por_perfil_solicitado",
+      "notesInFlow": false
+    },
+    {
+      "parameters": {
+        "description": "Obtiene el perfil completo y detallado de un candidato específico usando su correo electrónico.\n\nUsa esta herramienta cuando:\n- Ya tengas el correo electrónico de un candidato (obtenido de 'buscar_correo_candidatos_por_nombre' o proporcionado directamente por el usuario)\n- El usuario solicite información detallada de un candidato específico\n- Necesites consultar experiencia, habilidades, educación o cualquier dato del CV de un candidato\n\nParámetros requeridos:\n- correo: El correo electrónico exacto del candidato (ej: \"carolrosa95@hotmail.com\")\n\nRespuesta:\nRetorna un JSON con toda la información del perfil del candidato incluyendo:\n- Datos personales completos\n- Experiencia laboral detallada\n- Educación y títulos\n- Habilidades técnicas\n- Cursos y certificaciones\n- Cualquier otra información relevante del CV\n\nIMPORTANTE:\n- El correo debe ser exacto, sin espacios extra ni modificaciones\n- Esta herramienta retorna el perfil COMPLETO del candidato\n- Si el campo 'instruccion' en la respuesta contiene información, DEBES seguir esas instrucciones inmediatamente\n- Usa esta información para responder preguntas específicas sobre el candidato\n\nEjemplo de uso:\nUsuario: \"Muéstrame el perfil completo de carolrosa95@hotmail.com\"\n→ Usar esta herramienta con correo=\"carolrosa95@hotmail.com\"\n→ Presentar la información del candidato al usuario de forma clara y organizada\n→ Si hay campo 'instruccion', seguir lo que indique",
+        "workflowId": {
+          "__rl": true,
+          "value": "WaYIEXYLYbpXIQNs",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/WaYIEXYLYbpXIQNs",
+          "cachedResultName": "Tool - buscar datos de candidato por correo"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+      "typeVersion": 2.2,
+      "position": [
+        -240,
+        800
+      ],
+      "id": "50763646-ed9e-4a40-a04b-6e5ed15cd0dd",
+      "name": "candidato.obtener_por_correo"
+    },
+    {
+      "parameters": {
+        "description": "Busca candidatos por nombre y retorna sus correos electrónicos.\n\nUsa esta herramienta cuando:\n- El usuario mencione un nombre específico de candidato\n- Necesites obtener el correo electrónico de un candidato para consultarlo después\n- El usuario quiera ver qué candidatos existen con cierto nombre\n\nParámetros requeridos:\n- nombre: El nombre completo o parcial del candidato a buscar\n\nRespuesta:\nRetorna un JSON con:\n- total_encontrados: cantidad de candidatos que coinciden\n- candidatos: lista con objetos que contienen 'nombre' y 'correo' de cada candidato\n\nIMPORTANTE: \n- Si encuentras múltiples candidatos con el mismo nombre, muéstralos todos al usuario para que seleccione uno\n- Guarda los correos electrónicos obtenidos, los necesitarás para consultar el perfil completo con la herramienta 'obtener_datos_candidato_por_correo'\n- Si el campo 'instruccion' en la respuesta contiene información, DEBES seguir esas instrucciones inmediatamente\n\nEjemplo de uso:\nUsuario: \"Busca a Juan Pérez\"\n→ Usar esta herramienta con nombre=\"Juan Pérez\"\n→ Mostrar resultados al usuario con sus correos\n→ Si hay campo 'instruccion', seguir lo que indique",
+        "workflowId": {
+          "__rl": true,
+          "value": "ffyXAStTuI4TITEL",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/ffyXAStTuI4TITEL",
+          "cachedResultName": "Tool - buscar correo de candidatos por nombre"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+      "typeVersion": 2.2,
+      "position": [
+        -384,
+        848
+      ],
+      "id": "e80685dd-8933-4a10-8220-ff52e38a1256",
+      "name": "candidatos.buscar_correos_por_nombre"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Validar Entrada": {
+      "main": [
+        [
+          {
+            "node": "¿Validación OK?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Validación OK?": {
+      "main": [
+        [
+          {
+            "node": "Respond Error Validación",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook Agent Buscador CV": {
+      "main": [
+        [
+          {
+            "node": "Validar Entrada",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Formatear Respuesta Final": {
+      "main": [
+        [
+          {
+            "node": "Respond Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Error Agente": {
+      "main": [
+        [
+          {
+            "node": "Respond Error Agente",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Formatear Respuesta Final",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error Agente",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When chat message received": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Simple Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "candidatos.obtener_por_perfil_solicitado": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "candidato.obtener_por_correo": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "candidatos.buscar_correos_por_nombre": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "b0642062-7a5a-4d52-bd1f-9b03ef8c80e8",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "ea3a2191dd083f3463309ce1fd71d6ac10d38749f12af05ebf88e034ea7d7231"
+  },
+  "id": "ctfpPkdRWw2MCTa8",
+  "tags": []
+}
