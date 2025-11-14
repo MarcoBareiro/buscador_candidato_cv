@@ -1,6 +1,24 @@
 version: "3.8"
 
 services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: postgres
+    restart: unless-stopped
+    ports:
+      - "5435:5432"
+    environment:
+      - POSTGRES_USER=cv_user
+      - POSTGRES_PASSWORD=cv_password
+      - POSTGRES_DB=cv_candidato
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cv_user -d cv_candidato"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   qdrant:
     image: qdrant/qdrant:v1.15.5
     container_name: qdrant
@@ -18,7 +36,7 @@ services:
     ports:
       - "5678:5678"
     environment:
-      # 👇 Cambia esto por la IP LAN del servidor (ej. 192.168.1.100)
+      # Cambia esto por la IP LAN del servidor (ej. 192.168.1.100)
       - N8N_HOST=localhost
       - N8N_PORT=5678
       - N8N_PROTOCOL=http
@@ -33,7 +51,12 @@ services:
     volumes:
       - ./n8n_data:/home/node/.n8n
     depends_on:
-      - qdrant
+      postgres:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
 
 volumes:
   qdrant_storage:
+  postgres_data:
+
